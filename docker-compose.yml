@@ -12,6 +12,8 @@ services:
   backend:
     build:
       context: ./backend
+    env_file:
+      - ./backend/.env.example
     ports:
       - "8000:8000"
     environment:

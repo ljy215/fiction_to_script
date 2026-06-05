@@ -93,6 +93,13 @@ uv sync
 uv run fastapi dev app/main.py
 ```
 
+后端默认读取 [backend/.env.example](./backend/.env.example)。本地开发如需真实阿里百炼 API Key 或 JWT 密钥，复制为 `backend/.env` 后修改：
+
+```bash
+cd backend
+copy .env.example .env
+```
+
 ```bash
 # 后端，pip 兜底方式
 cd backend

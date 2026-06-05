@@ -2,18 +2,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
+from app.config import get_settings
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
+    settings.ensure_local_directories()
+
     app = FastAPI(
-        title="AI Novel To Script API",
+        title=settings.app_name,
         description="FastAPI backend for the AI novel-to-script MVP.",
-        version="0.1.0",
+        version=settings.app_version,
     )
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_origins=settings.cors_origin_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
