@@ -1,0 +1,8 @@
+*
+!.gitignore
+!data/
+!files/
+data/*
+files/*
+!data/.gitkeep
+!files/.gitkeep

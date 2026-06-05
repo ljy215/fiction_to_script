@@ -1,0 +1,23 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: "http://127.0.0.1:8000"
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: "development"
+      DATABASE_URL: "sqlite:////app/storage/data/app.sqlite3"
+      FILE_STORAGE_DIR: "/app/storage/files"
+    volumes:
+      - ./storage/data:/app/storage/data
+      - ./storage/files:/app/storage/files

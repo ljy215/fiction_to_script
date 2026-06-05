@@ -49,6 +49,7 @@ AI 小说转剧本工具是一个 Web 应用，目标是帮助小说作者将 3 
 fiction_to_script/
   AGENTS.md
   README.md
+  docker-compose.yml
   docs/
     README.md
     requirements.md
@@ -62,12 +63,15 @@ fiction_to_script/
     src/
   backend/
     app/
+    Dockerfile
     pyproject.toml
     requirements.txt
   storage/
+    data/
+    files/
 ```
 
-当前已完成 PR-001 文档入口、PR-002 前端脚手架和 PR-003 后端 FastAPI 脚手架。`docker-compose.yml` 和完整 Docker 启动脚本会在后续 PR 中逐步添加。
+当前已完成 PR-001 文档入口、PR-002 前端脚手架、PR-003 后端 FastAPI 脚手架和 PR-004 Docker 一键启动骨架。
 
 ## 本地启动入口
 
@@ -103,14 +107,23 @@ fastapi dev app/main.py
 curl http://127.0.0.1:8000/health
 ```
 
-Docker 启动入口会在后续 PR 中补充：
+Docker 一键启动：
 
 ```bash
 # Docker 一键启动
 docker compose up
 ```
 
-实际命令以后续脚手架 PR 中提交的脚本为准，根目录 README 会同步更新。
+Docker 服务：
+
+- 前端：http://127.0.0.1:5173
+- 后端：http://127.0.0.1:8000
+- 后端健康检查：http://127.0.0.1:8000/health
+
+本地持久化目录：
+
+- `storage/data`：SQLite 数据文件目录。
+- `storage/files`：上传文件和本地文件存储目录。
 
 ## 文档入口
 
