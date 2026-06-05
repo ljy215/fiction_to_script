@@ -1,0 +1,14 @@
+[project]
+name = "fiction-to-script-backend"
+version = "0.1.0"
+description = "FastAPI backend for the AI novel-to-script MVP."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.124.0,<0.125.0",
+]
+
+[dependency-groups]
+dev = []
+
+[tool.uv]
+package = false
