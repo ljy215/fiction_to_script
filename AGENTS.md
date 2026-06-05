@@ -65,6 +65,14 @@ Required PR content:
 
 After a PR is merged, the main branch must remain runnable. Reviewers or judges should be able to reproduce the demo effect from the main branch at any time.
 
+For this project, after each PR-scoped task is completed and verified, perform the repository upload flow unless the user explicitly says otherwise:
+
+- Commit the completed PR work on `dev`.
+- Push `dev` to `origin/dev`.
+- Merge `dev` into `main`.
+- Push `main` to `origin/main`.
+- Switch back to `dev` for the next task.
+
 If working as a team, each team only needs to submit one repository URL. Team members must use their own accounts to submit commits, and PR descriptions must clearly describe each member's contribution.
 
 If the project contains multiple independent modules, manage them in different subdirectories in the same repository:
