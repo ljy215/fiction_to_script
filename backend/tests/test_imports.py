@@ -1,7 +1,9 @@
 import tempfile
 import unittest
+from io import BytesIO
 from pathlib import Path
 
+from docx import Document
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -105,6 +107,55 @@ class ImportApiTest(unittest.TestCase):
         self.assertEqual(payload["content_text"], "第一章\n文本导入。")
         self.assertIsNotNone(payload["stored_file_id"])
         self.assertTrue(any(self.storage_root.rglob("*.txt")))
+
+    def test_import_docx_file_extracts_plain_text(self):
+        headers = self.auth_headers()
+        project_id = self.create_project(headers)
+        document = Document()
+        document.add_paragraph("第一章")
+        document.add_paragraph("这是 docx 正文。")
+        buffer = BytesIO()
+        document.save(buffer)
+
+        response = self.client.post(
+            f"/projects/{project_id}/imports/docx",
+            headers=headers,
+            files={
+                "file": (
+                    "novel.docx",
+                    buffer.getvalue(),
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["source_type"], "docx_file")
+        self.assertEqual(payload["original_filename"], "novel.docx")
+        self.assertEqual(payload["content_text"], "第一章\n这是 docx 正文。")
+        self.assertIsNotNone(payload["stored_file_id"])
+
+    def test_empty_docx_file_is_rejected(self):
+        headers = self.auth_headers()
+        project_id = self.create_project(headers)
+        document = Document()
+        buffer = BytesIO()
+        document.save(buffer)
+
+        response = self.client.post(
+            f"/projects/{project_id}/imports/docx",
+            headers=headers,
+            files={
+                "file": (
+                    "empty.docx",
+                    buffer.getvalue(),
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     def test_unsupported_file_type_is_rejected(self):
         headers = self.auth_headers()

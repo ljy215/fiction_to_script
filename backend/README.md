@@ -98,8 +98,9 @@ Available endpoints:
 
 - `POST /projects/{project_id}/imports/text`
 - `POST /projects/{project_id}/imports/txt`
+- `POST /projects/{project_id}/imports/docx`
 
-Import endpoints require a Bearer token and only accept projects owned by the current user. Text imports store pasted text directly. TXT imports accept multipart form data with a `.txt` file, save the file through local storage, read its text content, and reject unsupported file types.
+Import endpoints require a Bearer token and only accept projects owned by the current user. Text imports store pasted text directly. TXT and DOCX imports accept multipart form data, save the source file through local storage, read its text content, and reject unsupported file types.
 
 Run import tests:
 
