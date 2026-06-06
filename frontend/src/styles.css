@@ -134,6 +134,12 @@ h2 {
   color: #17212f;
 }
 
+.button.danger {
+  border-color: #f3b4ad;
+  background: #fff7f6;
+  color: #b42318;
+}
+
 .button.full {
   width: 100%;
 }
@@ -262,6 +268,10 @@ ul {
   line-height: 1.5;
 }
 
+.page-error {
+  margin: 0 0 18px;
+}
+
 .auth-switch,
 .muted {
   margin: 18px 0 0;
@@ -298,6 +308,200 @@ ul {
   line-height: 1.8;
 }
 
+.workspace-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 22px;
+  padding: 18px 20px;
+  border: 1px solid #d9deea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.workspace-summary strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #111827;
+}
+
+.summary-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #546177;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.project-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.project-form {
+  display: grid;
+  gap: 14px;
+}
+
+.project-form label {
+  display: grid;
+  gap: 8px;
+  color: #17212f;
+  font-weight: 700;
+}
+
+.project-form input,
+.project-form select,
+.project-form textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #c8d0df;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17212f;
+}
+
+.project-form textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
+.project-form input:focus,
+.project-form select:focus,
+.project-form textarea:focus {
+  outline: 3px solid rgba(31, 111, 235, 0.18);
+  outline-offset: 0;
+  border-color: #1f6feb;
+}
+
+.project-list-section {
+  min-width: 0;
+}
+
+.section-heading {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.section-heading h2 {
+  margin-bottom: 0;
+}
+
+.project-list {
+  display: grid;
+  gap: 12px;
+}
+
+.project-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid #d9deea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.project-card-header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.project-card h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #111827;
+  font-size: 1.08rem;
+}
+
+.project-meta {
+  margin: 0;
+  color: #546177;
+  line-height: 1.6;
+}
+
+.project-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.status-pill {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #1f4f99;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-ready {
+  background: #edf8f0;
+  color: #1f7a3a;
+}
+
+.status-failed {
+  background: #fff1ef;
+  color: #b42318;
+}
+
+.status-generating,
+.status-parsing {
+  background: #fff7e8;
+  color: #965f00;
+}
+
+.project-detail {
+  margin-top: 20px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+}
+
+.detail-grid div {
+  min-width: 0;
+}
+
+.detail-grid dt {
+  margin-bottom: 5px;
+  color: #546177;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.detail-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #17212f;
+  font-weight: 700;
+}
+
+.detail-description {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #d9deea;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     width: min(100% - 24px, 1120px);
@@ -324,5 +528,27 @@ ul {
 
   .topbar .button {
     width: 100%;
+  }
+
+  .workspace-summary,
+  .project-workspace,
+  .project-card,
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-summary .button,
+  .project-actions,
+  .project-actions .button {
+    width: 100%;
+  }
+
+  .project-actions {
+    flex-direction: column;
+  }
+
+  .project-card-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
