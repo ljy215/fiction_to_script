@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { importPastedText, importTxtFile } from '../api/imports'
 import { createProject, deleteProject, fetchProject, listProjects } from '../api/projects'
 import { useAuth } from '../stores/auth'
 
@@ -49,6 +50,10 @@ function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [importText, setImportText] = useState('')
+  const [importFile, setImportFile] = useState(null)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
   const [error, setError] = useState('')
 
   const selectedScriptTypeLabel = useMemo(() => {
@@ -83,6 +88,12 @@ function ProjectsPage() {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
   }
 
+  function resetImportState() {
+    setImportText('')
+    setImportFile(null)
+    setImportResult(null)
+  }
+
   async function handleCreate(event) {
     event.preventDefault()
     setCreating(true)
@@ -97,6 +108,7 @@ function ProjectsPage() {
       })
       setProjects((current) => [project, ...current])
       setSelectedProject(project)
+      resetImportState()
       setForm(initialForm)
     } catch (caughtError) {
       setError(caughtError.message)
@@ -110,6 +122,7 @@ function ProjectsPage() {
     try {
       const project = await fetchProject(token, projectId)
       setSelectedProject(project)
+      resetImportState()
     } catch (caughtError) {
       setError(caughtError.message)
     }
@@ -123,11 +136,53 @@ function ProjectsPage() {
       setProjects((current) => current.filter((project) => project.id !== projectId))
       if (selectedProject?.id === projectId) {
         setSelectedProject(null)
+        resetImportState()
       }
     } catch (caughtError) {
       setError(caughtError.message)
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  async function handleImportText(event) {
+    event.preventDefault()
+    if (!selectedProject) {
+      return
+    }
+
+    setImporting(true)
+    setError('')
+    setImportResult(null)
+    try {
+      const imported = await importPastedText(token, selectedProject.id, importText)
+      setImportResult(imported)
+      setImportText('')
+    } catch (caughtError) {
+      setError(caughtError.message)
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function handleImportFile(event) {
+    event.preventDefault()
+    if (!selectedProject || !importFile) {
+      return
+    }
+
+    setImporting(true)
+    setError('')
+    setImportResult(null)
+    try {
+      const imported = await importTxtFile(token, selectedProject.id, importFile)
+      setImportResult(imported)
+      setImportFile(null)
+      event.target.reset()
+    } catch (caughtError) {
+      setError(caughtError.message)
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -277,6 +332,53 @@ function ProjectsPage() {
             </div>
           </dl>
           {selectedProject.description && <p className="detail-description">{selectedProject.description}</p>}
+
+          <div className="import-tools" aria-label="小说导入">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Import</p>
+                <h2>导入小说文本</h2>
+              </div>
+            </div>
+            <div className="import-grid">
+              <form className="project-form import-form" onSubmit={handleImportText}>
+                <label>
+                  粘贴文本
+                  <textarea
+                    required
+                    name="import_text"
+                    rows="8"
+                    value={importText}
+                    onChange={(event) => setImportText(event.target.value)}
+                  />
+                </label>
+                <button className="button primary full" type="submit" disabled={importing}>
+                  {importing ? '导入中...' : '导入粘贴文本'}
+                </button>
+              </form>
+
+              <form className="project-form import-form" onSubmit={handleImportFile}>
+                <label>
+                  txt 文件
+                  <input
+                    required
+                    accept=".txt,text/plain"
+                    name="txt_file"
+                    type="file"
+                    onChange={(event) => setImportFile(event.target.files?.[0] || null)}
+                  />
+                </label>
+                <button className="button secondary full" type="submit" disabled={importing || !importFile}>
+                  {importing ? '导入中...' : '导入 txt 文件'}
+                </button>
+              </form>
+            </div>
+            {importResult && (
+              <p className="import-result">
+                已导入 {importResult.content_length} 个字符，来源：{importResult.source_type}
+              </p>
+            )}
+          </div>
         </section>
       )}
     </main>

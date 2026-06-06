@@ -92,6 +92,21 @@ Run file storage tests:
 uv run python -m unittest tests.test_files
 ```
 
+## Imports API
+
+Available endpoints:
+
+- `POST /projects/{project_id}/imports/text`
+- `POST /projects/{project_id}/imports/txt`
+
+Import endpoints require a Bearer token and only accept projects owned by the current user. Text imports store pasted text directly. TXT imports accept multipart form data with a `.txt` file, save the file through local storage, read its text content, and reject unsupported file types.
+
+Run import tests:
+
+```bash
+uv run python -m unittest tests.test_imports
+```
+
 ## Required Configuration
 
 - `BAILIAN_API_KEY`

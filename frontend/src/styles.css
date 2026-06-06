@@ -502,6 +502,30 @@ ul {
   white-space: pre-wrap;
 }
 
+.import-tools {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid #d9deea;
+}
+
+.import-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.import-form {
+  min-width: 0;
+}
+
+.import-result {
+  margin: 14px 0 0;
+  color: #1f7a3a;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     width: min(100% - 24px, 1120px);
@@ -533,7 +557,8 @@ ul {
   .workspace-summary,
   .project-workspace,
   .project-card,
-  .detail-grid {
+  .detail-grid,
+  .import-grid {
     grid-template-columns: 1fr;
   }
 
