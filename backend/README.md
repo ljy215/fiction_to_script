@@ -78,6 +78,20 @@ Available endpoints:
 
 All project endpoints require a Bearer token and only return projects owned by the current user.
 
+## Files API
+
+Available endpoints:
+
+- `POST /files`
+
+The upload endpoint requires a Bearer token and accepts multipart form data with a `file` field and optional `project_id`. Files are saved under `FILE_STORAGE_DIR` with generated filenames, and the API records metadata in the database.
+
+Run file storage tests:
+
+```bash
+uv run python -m unittest tests.test_files
+```
+
 ## Required Configuration
 
 - `BAILIAN_API_KEY`
