@@ -3,11 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
 from app.config import get_settings
+from app.db import init_db
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     settings.ensure_local_directories()
+    init_db()
 
     app = FastAPI(
         title=settings.app_name,

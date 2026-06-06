@@ -27,6 +27,23 @@ fastapi dev app/main.py
 
 ```bash
 curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/health/db
+```
+
+## Database
+
+The backend uses SQLite and SQLAlchemy for the MVP. The default local database URL is:
+
+```text
+sqlite:///./storage/data/app.sqlite3
+```
+
+The application initializes the database connection on startup and creates the SQLite file under `storage/data`.
+
+Run the database connection test:
+
+```bash
+uv run python -m unittest tests.test_db
 ```
 
 ## Required Configuration
