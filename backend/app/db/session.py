@@ -31,6 +31,8 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def init_db() -> None:
+    import app.models  # noqa: F401
+
     Base.metadata.create_all(bind=engine)
     check_db_connection()
 
