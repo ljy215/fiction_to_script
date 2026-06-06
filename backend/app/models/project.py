@@ -28,3 +28,4 @@ class Project(Base):
     )
 
     owner = relationship("User", back_populates="projects")
+    stored_files = relationship("StoredFile", back_populates="project", cascade="all, delete-orphan")
