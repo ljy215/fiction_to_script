@@ -24,4 +24,5 @@ class User(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
     projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
+    source_documents = relationship("SourceDocument", back_populates="owner", cascade="all, delete-orphan")
     stored_files = relationship("StoredFile", back_populates="owner", cascade="all, delete-orphan")
