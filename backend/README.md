@@ -46,6 +46,26 @@ Run the database connection test:
 uv run python -m unittest tests.test_db
 ```
 
+## Authentication
+
+Available endpoints:
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
+
+Run authentication tests:
+
+```bash
+uv run python -m unittest tests.test_auth
+```
+
+Run all backend tests:
+
+```bash
+uv run python -m unittest
+```
+
 ## Required Configuration
 
 - `BAILIAN_API_KEY`
