@@ -66,6 +66,18 @@ Run all backend tests:
 uv run python -m unittest
 ```
 
+## Projects API
+
+Available endpoints:
+
+- `POST /projects`
+- `GET /projects`
+- `GET /projects/{project_id}`
+- `PATCH /projects/{project_id}`
+- `DELETE /projects/{project_id}`
+
+All project endpoints require a Bearer token and only return projects owned by the current user.
+
 ## Required Configuration
 
 - `BAILIAN_API_KEY`

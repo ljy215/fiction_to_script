@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
@@ -23,3 +23,4 @@ class User(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+    projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
