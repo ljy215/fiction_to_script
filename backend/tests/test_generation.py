@@ -150,7 +150,22 @@ class GenerationApiTest(unittest.TestCase):
         self.assertEqual(update_response.status_code, 200)
         updated = update_response.json()
         self.assertEqual(updated["version_number"], 2)
+        self.assertNotEqual(updated["id"], script["id"])
         self.assertTrue(updated["yaml_content"].endswith("# edited"))
+
+        versions_response = self.client.get(f"/projects/{project_id}/scripts", headers=headers)
+        self.assertEqual(versions_response.status_code, 200)
+        versions = versions_response.json()
+        self.assertEqual([version["version_number"] for version in versions], [2, 1])
+
+        restore_response = self.client.post(
+            f"/projects/{project_id}/scripts/{script['id']}/restore",
+            headers=headers,
+        )
+        self.assertEqual(restore_response.status_code, 200)
+        restored = restore_response.json()
+        self.assertEqual(restored["version_number"], 3)
+        self.assertEqual(restored["yaml_content"], script["yaml_content"])
 
     def test_latest_script_returns_newest_document_after_multiple_generations(self):
         headers = self.auth_headers()

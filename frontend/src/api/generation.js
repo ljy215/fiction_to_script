@@ -75,11 +75,24 @@ export function fetchLatestScript(token, projectId) {
   })
 }
 
+export function fetchScriptVersions(token, projectId) {
+  return apiRequest(`/projects/${projectId}/scripts`, {
+    headers: authHeaders(token)
+  })
+}
+
 export function updateScript(token, projectId, scriptId, yamlContent) {
   return apiRequest(`/projects/${projectId}/scripts/${scriptId}`, {
     method: 'PATCH',
     headers: authHeaders(token),
     body: JSON.stringify({ yaml_content: yamlContent })
+  })
+}
+
+export function restoreScriptVersion(token, projectId, scriptId) {
+  return apiRequest(`/projects/${projectId}/scripts/${scriptId}/restore`, {
+    method: 'POST',
+    headers: authHeaders(token)
   })
 }
 

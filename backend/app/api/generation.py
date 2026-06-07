@@ -64,6 +64,16 @@ def _get_owned_source_document(db: Session, project_id: int, owner_id: int, sour
     return document
 
 
+def _next_script_version_number(db: Session, project_id: int, owner_id: int) -> int:
+    latest_version = db.scalar(
+        select(func.max(ScriptDocument.version_number)).where(
+            ScriptDocument.project_id == project_id,
+            ScriptDocument.owner_id == owner_id,
+        )
+    )
+    return int(latest_version or 0) + 1
+
+
 @router.post("/generation-tasks", response_model=GenerationTaskRead, status_code=status.HTTP_201_CREATED)
 def create_generation_task(
     project_id: int,
@@ -206,6 +216,24 @@ def read_latest_script(
     return script
 
 
+@router.get("/scripts", response_model=list[ScriptDocumentRead])
+def list_script_documents(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    get_owned_project(db, project_id, current_user.id)
+    return (
+        db.execute(
+            select(ScriptDocument)
+            .where(ScriptDocument.project_id == project_id, ScriptDocument.owner_id == current_user.id)
+            .order_by(ScriptDocument.version_number.desc(), ScriptDocument.id.desc())
+        )
+        .scalars()
+        .all()
+    )
+
+
 @router.patch("/scripts/{script_id}", response_model=ScriptDocumentRead)
 def update_script_document(
     project_id: int,
@@ -225,12 +253,52 @@ def update_script_document(
     if script is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Script document not found")
 
-    script.yaml_content = payload.yaml_content
-    script.version_number += 1
-    db.add(script)
+    next_script = ScriptDocument(
+        owner_id=script.owner_id,
+        project_id=script.project_id,
+        source_document_id=script.source_document_id,
+        title=script.title,
+        script_type=script.script_type,
+        yaml_content=payload.yaml_content,
+        version_number=_next_script_version_number(db, project_id, current_user.id),
+    )
+    db.add(next_script)
     db.commit()
-    db.refresh(script)
-    return script
+    db.refresh(next_script)
+    return next_script
+
+
+@router.post("/scripts/{script_id}/restore", response_model=ScriptDocumentRead)
+def restore_script_document(
+    project_id: int,
+    script_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    get_owned_project(db, project_id, current_user.id)
+    script = db.execute(
+        select(ScriptDocument).where(
+            ScriptDocument.id == script_id,
+            ScriptDocument.project_id == project_id,
+            ScriptDocument.owner_id == current_user.id,
+        )
+    ).scalar_one_or_none()
+    if script is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Script document not found")
+
+    restored = ScriptDocument(
+        owner_id=script.owner_id,
+        project_id=script.project_id,
+        source_document_id=script.source_document_id,
+        title=script.title,
+        script_type=script.script_type,
+        yaml_content=script.yaml_content,
+        version_number=_next_script_version_number(db, project_id, current_user.id),
+    )
+    db.add(restored)
+    db.commit()
+    db.refresh(restored)
+    return restored
 
 
 @router.post("/scripts/validate", response_model=ScriptYamlValidationResult)

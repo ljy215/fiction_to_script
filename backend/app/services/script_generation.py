@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import json
 
 import yaml
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
@@ -933,7 +933,16 @@ def run_generation_task(db: Session, task_id: int) -> None:
             title=f"{project.novel_title or project.name} 改编剧本",
             script_type=project.script_type,
             yaml_content=yaml_content,
-            version_number=1,
+            version_number=int(
+                db.scalar(
+                    select(func.max(ScriptDocument.version_number)).where(
+                        ScriptDocument.project_id == task.project_id,
+                        ScriptDocument.owner_id == task.owner_id,
+                    )
+                )
+                or 0
+            )
+            + 1,
         )
         db.add(script)
         db.flush()
