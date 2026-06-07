@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -9,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from app.db import Base, get_db
 from app.main import app
 from app.models import ChapterSummary, ScriptDocument, StoryCharacter, StoryEvent, StoryLocation
+from app.services.script_generation import _build_ai_generation_context, _build_prompt
 from app.services.script_validation import validate_script_yaml
 from app.storage import LocalFileStorage, get_file_storage
 
@@ -236,9 +238,59 @@ class GenerationApiTest(unittest.TestCase):
                 script_response = self.client.get(f"/projects/{project_id}/scripts/latest", headers=headers)
                 self.assertEqual(script_response.status_code, 200)
                 yaml_content = script_response.json()["yaml_content"]
-                self.assertIn(f'script_type: "{script_type}"', yaml_content)
-                self.assertIn(f'script_type_label: "{label}"', yaml_content)
-                self.assertIn(f'graph_name: "{graph_name}"', yaml_content)
+                payload = yaml.safe_load(yaml_content)
+                self.assertEqual(payload["script_config"]["script_type"], script_type)
+                self.assertEqual(payload["script_config"]["script_type_label"], label)
+                self.assertEqual(payload["script_config"]["agent_profile"], graph_name)
+                self.assertIn("writing_strategy", payload["script_config"])
+                self.assertEqual(payload["generation"]["graph_name"], graph_name)
+                self.assertEqual(payload["generation"]["graph_version"], "1.0")
+
+    def test_prompt_includes_selected_script_type_profile(self):
+        project = type(
+            "ProjectStub",
+            (),
+            {
+                "id": 1,
+                "name": "测试项目",
+                "novel_title": "测试小说",
+                "original_author": "作者",
+                "script_type": "audio_drama",
+            },
+        )()
+        source = type("SourceStub", (), {"id": 1})()
+        state = type(
+            "StateStub",
+            (),
+            {
+                "script_type": "audio_drama",
+                "source_language": "zh-CN",
+                "output_language": "zh-CN",
+                "chapters": [
+                    {
+                        "id": "ch_001",
+                        "order": 1,
+                        "title": "第一章",
+                        "content": "雨声里，林晚说：“你听见了吗？”",
+                        "content_length": 20,
+                    }
+                ],
+                "chapter_summaries": [],
+                "events": [],
+                "characters": [],
+                "locations": [],
+                "adaptation": {},
+            },
+        )()
+
+        context = _build_ai_generation_context(project, source, state)
+        prompt = _build_prompt(project, source, state)
+
+        self.assertEqual(context["agent_profile"]["graph_name"], "audio_drama_script_graph")
+        self.assertEqual(context["agent_profile"]["scene_focus"], "用声音建立空间、气氛和人物关系。")
+        self.assertIn("广播剧剧本", prompt)
+        self.assertIn("generation.graph_name 必须是 audio_drama_script_graph", prompt)
+        self.assertIn("增加旁白、音效提示和语气变化。", prompt)
 
 
 if __name__ == "__main__":

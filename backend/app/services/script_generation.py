@@ -36,6 +36,10 @@ from app.models import (
 from app.services.bailian_client import BailianChatMessage, BailianClient, is_mock_bailian_api_key
 
 
+CHAPTER_CONTEXT_CHAR_LIMIT = 12000
+CHAPTER_DIALOGUE_SAMPLE_LIMIT = 12
+
+
 def _yaml_scalar(value: object) -> str:
     text = "" if value is None else str(value)
     escaped = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
@@ -258,14 +262,22 @@ def _chapter_source_blocks(state: GenerationGraphState) -> list[dict[str, object
 
 
 def _build_ai_generation_context(project: Project, source: SourceDocument, state: GenerationGraphState) -> dict[str, object]:
+    profile = get_agent_profile(state.script_type or project.script_type)
     return {
         "project": {
             "id": project.id,
             "name": project.name,
             "novel_title": project.novel_title,
             "original_author": project.original_author,
-            "script_type": state.script_type or project.script_type or "film",
-            "script_type_label": SCRIPT_TYPE_LABELS.get(state.script_type or project.script_type or "film", "影视剧本"),
+            "script_type": profile.script_type.value,
+            "script_type_label": profile.label,
+        },
+        "agent_profile": {
+            "graph_name": profile.graph_name,
+            "graph_version": profile.graph_version,
+            "strategy": profile.strategy,
+            "scene_focus": profile.scene_focus,
+            "line_focus": profile.line_focus,
         },
         "source": {
             "id": source.id,
@@ -284,24 +296,31 @@ def _build_ai_generation_context(project: Project, source: SourceDocument, state
 
 def _build_prompt(project: Project, source: SourceDocument, state: GenerationGraphState) -> str:
     context = _build_ai_generation_context(project, source, state)
+    profile = get_agent_profile(state.script_type or project.script_type)
     return (
         "你要把小说原文按章节直接改编成完整中文 YAML 剧本初稿。\n"
+        f"本次用户选择的剧本类型是：{profile.label}（{profile.script_type.value}）。\n"
+        f"必须采用该类型对应的写作策略：{profile.strategy}\n"
+        f"场景侧重点：{profile.scene_focus}\n"
+        f"台词/文本侧重点：{profile.line_focus}\n"
         "下面的 source_chapters 已经按章节切分，每一项都包含 chapter_id、event_id、title、原文 content 和对白样例。\n"
         "请优先依据 source_chapters.content 改编，不要只依据摘要，不要把章节压缩成泛泛的几句话。\n\n"
         "硬性输出要求：\n"
         "1. 只能输出 YAML 正文，不要 Markdown 代码块，不要解释。\n"
         "2. 必须严格使用 docs/script-yaml-schema.md 的顶层结构：schema_version、document、source、script_config、generation、characters、locations、events、adaptation、script.scenes、editor_state、notes。\n"
-        "3. source.chapters 要列出所有输入章节；events 至少每章 1 个，并使用提供的 event_id。\n"
-        "4. script.scenes 必须按章节顺序展开：每章至少 1 场；动作/冲突强的章节生成 2-4 场。\n"
-        "5. 不要合并成“主要场景”这类空泛场景；heading 要根据原文地点、时间、内外景具体命名。\n"
-        "6. 必须保留并改写原文中的关键对白。对白密集章节，每章至少写 4-10 行 dialogue；战斗/行动章节要写足 action 细节。\n"
-        "7. 每个 scene.source_refs 必须引用对应 chapter_id 和 event_id，所有 character_id、location_id 引用必须存在。\n"
-        "8. 改编策略是尽量忠实原文，允许少量过场衔接，但不得大幅删减关键对话、战斗动作、人物选择和场景推进。\n"
-        "9. 每场 scenes.lines 不能只有人物对话和地点。每场至少 8 行 lines，其中至少 3 行 action 用来写背景环境、天气、光线、声音、道具、人物走位、表情和肢体动作。\n"
-        "10. 每场开头必须先写 1-3 行 action 建立画面背景，再进入对白；对白之间也要穿插动作和环境变化。\n"
-        "11. 战斗、埋伏、追逐、修炼类章节要以 action 为主，写清空间关系、攻防动作、伤势、节奏变化和现场氛围，不能概括成一句话。\n"
-        "12. characters 和 locations 要尽量从原文抽取真实姓名和地点名，不要使用“主人公”“主要场景”这类占位名，除非原文没有提供。\n"
-        "13. 输出语言必须是中文，YAML 字符串请正确转义。\n\n"
+        f"3. script_config.script_type 必须是 {profile.script_type.value}，script_config.script_type_label 必须是 {profile.label}。\n"
+        f"4. generation.graph_name 必须是 {profile.graph_name}，generation.graph_version 必须是 {profile.graph_version}。\n"
+        "5. source.chapters 要列出所有输入章节；events 至少每章 1 个，并使用提供的 event_id。\n"
+        "6. script.scenes 必须按章节顺序展开：每章至少 1 场；动作/冲突强的章节生成 2-4 场。\n"
+        "7. 不要合并成“主要场景”这类空泛场景；heading 要根据原文地点、时间、内外景具体命名。\n"
+        "8. 必须保留并改写原文中的关键对白。对白密集章节，每章至少写 4-10 行 dialogue；战斗/行动章节要写足 action 细节。\n"
+        "9. 每个 scene.source_refs 必须引用对应 chapter_id 和 event_id，所有 character_id、location_id 引用必须存在。\n"
+        "10. 改编策略是尽量忠实原文，允许少量过场衔接，但不得大幅删减关键对话、战斗动作、人物选择和场景推进。\n"
+        "11. 每场 scenes.lines 不能只有人物对话和地点。每场至少 8 行 lines，其中至少 3 行 action 用来写背景环境、天气、光线、声音、道具、人物走位、表情和肢体动作。\n"
+        "12. 每场开头必须先写 1-3 行 action 建立画面背景，再进入对白；对白之间也要穿插动作和环境变化。\n"
+        "13. 战斗、埋伏、追逐、修炼类章节要以 action 为主，写清空间关系、攻防动作、伤势、节奏变化和现场氛围，不能概括成一句话。\n"
+        "14. characters 和 locations 要尽量从原文抽取真实姓名和地点名，不要使用“主人公”“主要场景”这类占位名，除非原文没有提供。\n"
+        "15. 输出语言必须是中文，YAML 字符串请正确转义。\n\n"
         f"章节级原文上下文：\n{json.dumps(context, ensure_ascii=False, indent=2)}"
     )
 
@@ -383,8 +402,9 @@ def _normalize_ai_yaml_content(
 
     now = datetime.now(timezone.utc).isoformat()
     title = project.novel_title or project.name
-    script_type = state.script_type or project.script_type or "film"
-    script_type_label = SCRIPT_TYPE_LABELS.get(script_type, script_type)
+    profile = get_agent_profile(state.script_type or project.script_type)
+    script_type = profile.script_type.value
+    script_type_label = profile.label
     chapters = [
         {
             "id": summary["chapter_id"],
@@ -422,13 +442,15 @@ def _normalize_ai_yaml_content(
         script_config["script_type_label"] = script_type_label
         script_config["fidelity_policy"] = script_config.get("fidelity_policy") or "faithful"
         script_config["output_mode"] = script_config.get("output_mode") or "single_document"
+        script_config["agent_profile"] = profile.graph_name
+        script_config["writing_strategy"] = profile.strategy
 
     generation = payload.setdefault("generation", {})
     if isinstance(generation, dict):
         generation["provider"] = provider
         generation["model"] = model
-        generation.setdefault("graph_name", "mvp_script_generation_graph")
-        generation.setdefault("graph_version", "1.0")
+        generation["graph_name"] = profile.graph_name
+        generation["graph_version"] = profile.graph_version
         generation["generated_at"] = generation.get("generated_at") or now
         generation.setdefault("agent_runs", [{"node": node, "status": "success"} for node in state.completed_nodes])
 
@@ -570,8 +592,9 @@ def _build_complete_yaml(
 ) -> str:
     now = datetime.now(timezone.utc).isoformat()
     title = project.novel_title or project.name
-    script_type = state.script_type or project.script_type or "film"
-    script_type_label = SCRIPT_TYPE_LABELS.get(script_type, script_type)
+    profile = get_agent_profile(state.script_type or project.script_type)
+    script_type = profile.script_type.value
+    script_type_label = profile.label
     chapters = [
         {
             "id": summary["chapter_id"],
@@ -645,12 +668,14 @@ def _build_complete_yaml(
             "script_type_label": script_type_label,
             "fidelity_policy": "faithful",
             "output_mode": "single_document",
+            "agent_profile": profile.graph_name,
+            "writing_strategy": profile.strategy,
         },
         "generation": {
             "provider": provider,
             "model": model,
-            "graph_name": "mvp_script_generation_graph",
-            "graph_version": "1.0",
+            "graph_name": profile.graph_name,
+            "graph_version": profile.graph_version,
             "generated_at": now,
             "agent_runs": [{"node": node, "status": "success"} for node in state.completed_nodes],
         },

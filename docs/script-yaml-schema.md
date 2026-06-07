@@ -65,6 +65,8 @@ script_config:
   script_type_label: "影视剧本"
   fidelity_policy: "faithful"
   output_mode: "single_document"
+  agent_profile: "film_script_graph"
+  writing_strategy: "强调场景调度、动作、对白和叙事连贯性。"
 
 generation:
   provider: "aliyun_bailian"
@@ -225,6 +227,8 @@ notes:
 - `script_type_label`：剧本类型中文名称。
 - `fidelity_policy`：忠实度策略，MVP 使用 `faithful`。
 - `output_mode`：输出模式，MVP 使用 `single_document`。
+- `agent_profile`：本次剧本类型对应的智能体 profile 或图名称。
+- `writing_strategy`：本次剧本类型对应的写作策略说明。
 
 建议 `script_type`：
 
@@ -233,7 +237,7 @@ notes:
 - `audio_drama`：广播剧剧本。
 - `stage_play`：舞台剧剧本。
 
-设计原因：用户选择不同剧本类型后，系统需要调用不同智能体流程，并在 YAML 中保留该选择。
+设计原因：用户选择不同剧本类型后，系统需要调用不同智能体流程，并在 YAML 中保留该选择。`agent_profile` 和 `writing_strategy` 让生成结果能追溯到具体写作策略，便于后续编辑、局部重生成和问题复现。
 
 ### 4.5 `generation`
 
@@ -244,7 +248,7 @@ notes:
 
 - `provider`：模型供应商，MVP 为 `aliyun_bailian`。
 - `model`：模型名称。
-- `graph_name`：LangGraph 图名称。
+- `graph_name`：LangGraph 图名称，必须与 `script_config.agent_profile` 对应。
 - `graph_version`：LangGraph 图版本。
 - `generated_at`：生成时间。
 - `agent_runs`：智能体节点运行记录。
