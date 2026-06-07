@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { createGenerationTask, fetchGenerationTask, fetchLatestScript, updateScript } from '../api/generation'
+import { createGenerationTask, fetchGenerationTask, fetchLatestScript, updateScript, validateScriptYaml } from '../api/generation'
 import { importDocxFile, importEpubFile, importPastedText, importPdfFile, importTxtFile, listChapters } from '../api/imports'
 import { createProject, deleteProject, fetchProject, listProjects } from '../api/projects'
+import YamlPreview from '../components/YamlPreview'
 import { useAuth } from '../stores/auth'
 
 const scriptTypes = [
@@ -73,6 +74,9 @@ function ProjectsPage() {
   const [generationTask, setGenerationTask] = useState(null)
   const [scriptDocument, setScriptDocument] = useState(null)
   const [yamlDraft, setYamlDraft] = useState('')
+  const [validationResult, setValidationResult] = useState(null)
+  const [validationError, setValidationError] = useState('')
+  const [validatingYaml, setValidatingYaml] = useState(false)
   const [error, setError] = useState('')
 
   const selectedScriptTypeLabel = useMemo(() => {
@@ -117,6 +121,8 @@ function ProjectsPage() {
     setGenerationTask(null)
     setScriptDocument(null)
     setYamlDraft('')
+    setValidationResult(null)
+    setValidationError('')
   }
 
   async function loadChapters(projectId, documentId) {
@@ -129,9 +135,13 @@ function ProjectsPage() {
       const latest = await fetchLatestScript(token, projectId)
       setScriptDocument(latest)
       setYamlDraft(latest.yaml_content)
+      setValidationResult(null)
+      setValidationError('')
     } catch {
       setScriptDocument(null)
       setYamlDraft('')
+      setValidationResult(null)
+      setValidationError('')
     }
   }
 
@@ -191,6 +201,8 @@ function ProjectsPage() {
     setSourceDocument(imported)
     setScriptDocument(null)
     setYamlDraft('')
+    setValidationResult(null)
+    setValidationError('')
     await loadChapters(imported.project_id, imported.id)
   }
 
@@ -292,11 +304,37 @@ function ProjectsPage() {
       const updated = await updateScript(token, selectedProject.id, scriptDocument.id, yamlDraft)
       setScriptDocument(updated)
       setYamlDraft(updated.yaml_content)
+      setValidationResult(null)
+      setValidationError('')
     } catch (caughtError) {
       setError(caughtError.message)
     } finally {
       setSavingScript(false)
     }
+  }
+
+  async function handleValidateYaml() {
+    if (!selectedProject || !yamlDraft) {
+      return
+    }
+
+    setValidatingYaml(true)
+    setValidationError('')
+    try {
+      const result = await validateScriptYaml(token, selectedProject.id, yamlDraft)
+      setValidationResult(result)
+    } catch (caughtError) {
+      setValidationResult(null)
+      setValidationError(caughtError.message)
+    } finally {
+      setValidatingYaml(false)
+    }
+  }
+
+  function handleYamlDraftChange(event) {
+    setYamlDraft(event.target.value)
+    setValidationResult(null)
+    setValidationError('')
   }
 
   return (
@@ -554,16 +592,27 @@ function ProjectsPage() {
               <button className="button secondary" type="button" onClick={handleExport} disabled={!yamlDraft}>
                 导出 YAML
               </button>
+              <button className="button secondary" type="button" onClick={handleValidateYaml} disabled={!yamlDraft || validatingYaml}>
+                {validatingYaml ? '校验中...' : '校验 YAML'}
+              </button>
               <button className="button primary" type="button" onClick={handleSaveScript} disabled={!scriptDocument || !yamlDraft || savingScript}>
                 {savingScript ? '保存中...' : '保存'}
               </button>
             </div>
-            <textarea
-              className="yaml-editor"
-              value={yamlDraft}
-              onChange={(event) => setYamlDraft(event.target.value)}
-              placeholder="生成后的 YAML 会显示在这里。"
-            />
+            <div className="script-review-grid">
+              <textarea
+                className="yaml-editor"
+                value={yamlDraft}
+                onChange={handleYamlDraftChange}
+                placeholder="生成后的 YAML 会显示在这里。"
+              />
+              <YamlPreview
+                yamlContent={yamlDraft}
+                validationResult={validationResult}
+                validationError={validationError}
+                validating={validatingYaml}
+              />
+            </div>
             {scriptDocument && (
               <p className="muted">
                 当前版本：v{scriptDocument.version_number} · 更新时间 {formatDate(scriptDocument.updated_at)}
