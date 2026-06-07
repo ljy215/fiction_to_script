@@ -394,6 +394,8 @@ backend/
 
 ### PR-018：YAML Schema 校验后端
 
+状态：已完成
+
 标题：添加剧本 YAML Schema 校验服务
 
 范围：

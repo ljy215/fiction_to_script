@@ -27,6 +27,20 @@ class ScriptDocumentUpdate(BaseModel):
     yaml_content: str = Field(min_length=1)
 
 
+class ScriptYamlValidationCreate(BaseModel):
+    yaml_content: str = Field(min_length=1)
+
+
+class ScriptYamlValidationErrorRead(BaseModel):
+    path: str
+    message: str
+
+
+class ScriptYamlValidationResult(BaseModel):
+    valid: bool
+    errors: list[ScriptYamlValidationErrorRead]
+
+
 class GenerationTaskRead(BaseModel):
     id: int
     owner_id: int
