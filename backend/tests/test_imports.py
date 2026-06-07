@@ -90,6 +90,66 @@ class ImportApiTest(unittest.TestCase):
         self.assertEqual(payload["content_length"], len("第一章\n故事开始。"))
         self.assertIsNone(payload["stored_file_id"])
 
+    def test_import_pasted_text_recognizes_three_chapters(self):
+        headers = self.auth_headers()
+        project_id = self.create_project(headers)
+        text = "\n".join(
+            [
+                "第一章 初遇",
+                "林晚在雨夜遇见旧友。",
+                "第二章 追问",
+                "旧友说出失踪线索。",
+                "第三章 决定",
+                "林晚决定回到故乡。",
+            ]
+        )
+
+        response = self.client.post(
+            f"/projects/{project_id}/imports/text",
+            headers=headers,
+            json={"text": text},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["chapter_count"], 3)
+        self.assertEqual(payload["minimum_chapters_required"], 3)
+        self.assertTrue(payload["is_generation_ready"])
+
+        chapters_response = self.client.get(
+            f"/projects/{project_id}/imports/{payload['id']}/chapters",
+            headers=headers,
+        )
+
+        self.assertEqual(chapters_response.status_code, 200)
+        chapters = chapters_response.json()
+        self.assertEqual([chapter["title"] for chapter in chapters], ["第一章 初遇", "第二章 追问", "第三章 决定"])
+        self.assertEqual(chapters[0]["content_text"], "林晚在雨夜遇见旧友。")
+
+    def test_two_chapter_import_is_not_generation_ready(self):
+        headers = self.auth_headers()
+        project_id = self.create_project(headers)
+
+        response = self.client.post(
+            f"/projects/{project_id}/imports/text",
+            headers=headers,
+            json={
+                "text": "\n".join(
+                    [
+                        "Chapter 1: Arrival",
+                        "The stranger reaches the station.",
+                        "Chapter 2: Letter",
+                        "A hidden letter changes the plan.",
+                    ]
+                )
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["chapter_count"], 2)
+        self.assertFalse(payload["is_generation_ready"])
+
     def test_import_txt_file(self):
         headers = self.auth_headers()
         project_id = self.create_project(headers)

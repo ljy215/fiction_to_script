@@ -4,13 +4,15 @@ from typing import Annotated
 from docx import Document
 from docx.opc.exceptions import PackageNotFoundError
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.projects import get_owned_project
 from app.auth.dependencies import get_current_user
 from app.db import get_db
-from app.models import SourceDocument, StoredFile, User
-from app.schemas import SourceDocumentRead, TextImportCreate
+from app.models import Chapter, SourceDocument, StoredFile, User
+from app.schemas import ChapterRead, SourceDocumentRead, TextImportCreate
+from app.services.chapters import recognize_chapters
 from app.storage import LocalFileStorage, get_file_storage
 
 router = APIRouter(prefix="/projects/{project_id}/imports", tags=["imports"])
@@ -111,6 +113,19 @@ def _create_source_document(
         content_length=len(text),
     )
     db.add(document)
+    db.flush()
+    for parsed_chapter in recognize_chapters(text):
+        db.add(
+            Chapter(
+                owner_id=owner_id,
+                project_id=project_id,
+                source_document_id=document.id,
+                order=parsed_chapter.order,
+                title=parsed_chapter.title,
+                content_text=parsed_chapter.content_text,
+                content_length=parsed_chapter.content_length,
+            )
+        )
     db.commit()
     db.refresh(document)
     return document
@@ -155,19 +170,15 @@ def import_txt_file(
     )
 
     text = _decode_text_file(stored_path.read_bytes())
-    document = SourceDocument(
+    return _create_source_document(
+        db=db,
         owner_id=current_user.id,
         project_id=project_id,
         stored_file_id=stored_file.id,
         source_type="txt_file",
         original_filename=stored_file.original_filename,
-        content_text=text,
-        content_length=len(text),
+        text=text,
     )
-    db.add(document)
-    db.commit()
-    db.refresh(document)
-    return document
 
 
 @router.post("/docx", response_model=SourceDocumentRead, status_code=status.HTTP_201_CREATED)
@@ -191,16 +202,45 @@ def import_docx_file(
     )
 
     text = _extract_docx_text(stored_path)
-    document = SourceDocument(
+    return _create_source_document(
+        db=db,
         owner_id=current_user.id,
         project_id=project_id,
         stored_file_id=stored_file.id,
         source_type="docx_file",
         original_filename=stored_file.original_filename,
-        content_text=text,
-        content_length=len(text),
+        text=text,
     )
-    db.add(document)
-    db.commit()
-    db.refresh(document)
-    return document
+
+
+@router.get("/{source_document_id}/chapters", response_model=list[ChapterRead])
+def list_document_chapters(
+    project_id: int,
+    source_document_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    get_owned_project(db, project_id, current_user.id)
+    document = db.execute(
+        select(SourceDocument).where(
+            SourceDocument.id == source_document_id,
+            SourceDocument.project_id == project_id,
+            SourceDocument.owner_id == current_user.id,
+        )
+    ).scalar_one_or_none()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Source document not found",
+        )
+
+    statement = (
+        select(Chapter)
+        .where(
+            Chapter.source_document_id == source_document_id,
+            Chapter.project_id == project_id,
+            Chapter.owner_id == current_user.id,
+        )
+        .order_by(Chapter.order)
+    )
+    return db.execute(statement).scalars().all()
