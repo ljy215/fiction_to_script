@@ -933,6 +933,41 @@ ul {
   line-height: 1.5;
 }
 
+.script-history {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #d9deea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.version-list {
+  display: grid;
+  gap: 10px;
+}
+
+.version-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e6ebf3;
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.version-row strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #111827;
+}
+
+.version-row span {
+  color: #546177;
+  font-size: 0.9rem;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     width: min(100% - 24px, 1120px);
@@ -969,6 +1004,7 @@ ul {
   .workflow-grid,
   .script-review-grid,
   .script-line,
+  .version-row,
   .chapter-row {
     grid-template-columns: 1fr;
   }

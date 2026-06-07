@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { createGenerationTask, fetchLatestScript, streamGenerationTask, updateScript, validateScriptYaml } from '../api/generation'
+import {
+  createGenerationTask,
+  fetchLatestScript,
+  fetchScriptVersions,
+  restoreScriptVersion,
+  streamGenerationTask,
+  updateScript,
+  validateScriptYaml
+} from '../api/generation'
 import { importDocxFile, importEpubFile, importPastedText, importPdfFile, importTxtFile, listChapters } from '../api/imports'
 import { createProject, deleteProject, fetchProject, listProjects } from '../api/projects'
 import YamlPreview from '../components/YamlPreview'
@@ -164,11 +172,13 @@ function ProjectsPage() {
   const [savingScript, setSavingScript] = useState(false)
   const [generationTask, setGenerationTask] = useState(null)
   const [scriptDocument, setScriptDocument] = useState(null)
+  const [scriptVersions, setScriptVersions] = useState([])
   const [yamlDraft, setYamlDraft] = useState('')
   const [scriptViewDraft, setScriptViewDraft] = useState(parseScriptView(''))
   const [validationResult, setValidationResult] = useState(null)
   const [validationError, setValidationError] = useState('')
   const [validatingYaml, setValidatingYaml] = useState(false)
+  const [restoringScriptId, setRestoringScriptId] = useState(null)
   const [error, setError] = useState('')
 
   const selectedScriptTypeLabel = useMemo(() => {
@@ -216,6 +226,7 @@ function ProjectsPage() {
     setChapters([])
     setGenerationTask(null)
     setScriptDocument(null)
+    setScriptVersions([])
     setYamlDraft('')
     setValidationResult(null)
     setValidationError('')
@@ -229,12 +240,15 @@ function ProjectsPage() {
   async function loadLatestScript(projectId) {
     try {
       const latest = await fetchLatestScript(token, projectId)
+      const versions = await fetchScriptVersions(token, projectId)
       setScriptDocument(latest)
+      setScriptVersions(versions)
       setYamlDraft(latest.yaml_content)
       setValidationResult(null)
       setValidationError('')
     } catch {
       setScriptDocument(null)
+      setScriptVersions([])
       setYamlDraft('')
       setValidationResult(null)
       setValidationError('')
@@ -296,6 +310,7 @@ function ProjectsPage() {
   async function acceptImportedDocument(imported) {
     setSourceDocument(imported)
     setScriptDocument(null)
+    setScriptVersions([])
     setYamlDraft('')
     setValidationResult(null)
     setValidationError('')
@@ -374,7 +389,9 @@ function ProjectsPage() {
 
       if (finalTask.status === 'succeeded') {
         const latest = await fetchLatestScript(token, selectedProject.id)
+        const versions = await fetchScriptVersions(token, selectedProject.id)
         setScriptDocument(latest)
+        setScriptVersions(versions)
         setValidationResult(null)
         setValidationError('')
         setYamlDraft('')
@@ -419,7 +436,9 @@ function ProjectsPage() {
       }
 
       const updated = await updateScript(token, selectedProject.id, scriptDocument.id, yamlDraft)
+      const versions = await fetchScriptVersions(token, selectedProject.id)
       setScriptDocument(updated)
+      setScriptVersions(versions)
       setYamlDraft(updated.yaml_content)
       setValidationResult(validation)
       setValidationError('')
@@ -452,6 +471,28 @@ function ProjectsPage() {
     setYamlDraft(event.target.value)
     setValidationResult(null)
     setValidationError('')
+  }
+
+  async function handleRestoreScript(scriptId) {
+    if (!selectedProject) {
+      return
+    }
+
+    setRestoringScriptId(scriptId)
+    setError('')
+    try {
+      const restored = await restoreScriptVersion(token, selectedProject.id, scriptId)
+      const versions = await fetchScriptVersions(token, selectedProject.id)
+      setScriptDocument(restored)
+      setScriptVersions(versions)
+      setYamlDraft(restored.yaml_content)
+      setValidationResult(null)
+      setValidationError('')
+    } catch (caughtError) {
+      setError(caughtError.message)
+    } finally {
+      setRestoringScriptId(null)
+    }
   }
 
   function handleScriptLineTextChange(sceneId, lineId, text) {
@@ -764,6 +805,32 @@ function ProjectsPage() {
               <p className="muted">
                 当前版本：v{scriptDocument.version_number} · 更新时间 {formatDate(scriptDocument.updated_at)}
               </p>
+            )}
+            {scriptVersions.length > 0 && (
+              <section className="script-history" aria-label="剧本历史版本">
+                <div className="preview-heading">
+                  <h3>历史版本</h3>
+                  <span>{scriptVersions.length} 个版本</span>
+                </div>
+                <div className="version-list">
+                  {scriptVersions.map((version) => (
+                    <article className="version-row" key={version.id}>
+                      <div>
+                        <strong>v{version.version_number}</strong>
+                        <span>{formatDate(version.updated_at)}</span>
+                      </div>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        onClick={() => handleRestoreScript(version.id)}
+                        disabled={restoringScriptId === version.id || scriptDocument?.id === version.id}
+                      >
+                        {restoringScriptId === version.id ? '恢复中...' : scriptDocument?.id === version.id ? '当前版本' : '恢复'}
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              </section>
             )}
           </section>
         </section>
