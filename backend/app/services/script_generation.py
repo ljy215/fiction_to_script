@@ -3,6 +3,14 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agents.nodes import (
+    chapter_summarizer_node,
+    document_parser_node,
+    event_extractor_node,
+    language_detector_node,
+    schema_validator_node,
+    yaml_builder_node,
+)
 from app.agents.state import GenerationGraphState
 from app.config import get_settings
 from app.models import Chapter, GenerationTask, Project, ScriptDocument, SourceDocument
@@ -221,7 +229,6 @@ def run_generation_task(db: Session, task_id: int) -> None:
 
     try:
         task.status = "running"
-        task.current_node = "document_parser"
         task.progress = 20
         project = db.get(Project, task.project_id)
         source = db.get(SourceDocument, task.source_document_id)
@@ -244,22 +251,25 @@ def run_generation_task(db: Session, task_id: int) -> None:
             project_id=project.id,
             source_document_id=source.id,
             script_type=project.script_type,
-            chapters=[
-                {
-                    "id": f"ch_{chapter.order:03d}",
-                    "database_id": chapter.id,
-                    "order": chapter.order,
-                    "title": chapter.title,
-                    "content_length": chapter.content_length,
-                }
-                for chapter in chapters
-            ],
         )
-        state.finish_node("document_parser")
+        task.current_node = "document_parser"
+        state = document_parser_node(state, source, chapters)
         task.graph_state = state.model_dump_json(ensure_ascii=False)
 
-        task.progress = 55
-        task.current_node = "yaml_builder"
+        task.current_node = "language_detector"
+        state = language_detector_node(state, source)
+        task.graph_state = state.model_dump_json(ensure_ascii=False)
+
+        task.progress = 40
+        task.current_node = "chapter_summarizer"
+        state = chapter_summarizer_node(state)
+        task.graph_state = state.model_dump_json(ensure_ascii=False)
+
+        task.current_node = "event_extractor"
+        state = event_extractor_node(state)
+        task.graph_state = state.model_dump_json(ensure_ascii=False)
+
+        task.progress = 70
         provider = "mock" if _is_mock_configured() else "aliyun_bailian"
         task.provider = provider
         task.model = "mock-script-writer" if provider == "mock" else get_settings().bailian_model
@@ -268,8 +278,14 @@ def run_generation_task(db: Session, task_id: int) -> None:
             if provider == "mock"
             else _call_bailian(project, chapters, project.script_type)
         )
-        state.yaml_content = yaml_content
-        state.finish_node("yaml_builder")
+        task.current_node = "yaml_builder"
+        state = yaml_builder_node(state, project, yaml_content)
+        task.graph_state = state.model_dump_json(ensure_ascii=False)
+
+        task.current_node = "schema_validator"
+        state = schema_validator_node(state)
+        if state.errors:
+            raise ValueError("; ".join(state.errors))
         task.graph_state = state.model_dump_json(ensure_ascii=False)
 
         script = ScriptDocument(
