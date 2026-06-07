@@ -4,6 +4,8 @@ import { createGenerationTask, fetchLatestScript, streamGenerationTask, updateSc
 import { importDocxFile, importEpubFile, importPastedText, importPdfFile, importTxtFile, listChapters } from '../api/imports'
 import { createProject, deleteProject, fetchProject, listProjects } from '../api/projects'
 import YamlPreview from '../components/YamlPreview'
+import ScriptViewEditor from '../editors/ScriptViewEditor'
+import { parseScriptView, updateSceneLineCharacter, updateSceneLineText } from '../editors/scriptView'
 import { useAuth } from '../stores/auth'
 
 const scriptTypes = [
@@ -163,6 +165,7 @@ function ProjectsPage() {
   const [generationTask, setGenerationTask] = useState(null)
   const [scriptDocument, setScriptDocument] = useState(null)
   const [yamlDraft, setYamlDraft] = useState('')
+  const [scriptViewDraft, setScriptViewDraft] = useState(parseScriptView(''))
   const [validationResult, setValidationResult] = useState(null)
   const [validationError, setValidationError] = useState('')
   const [validatingYaml, setValidatingYaml] = useState(false)
@@ -197,6 +200,10 @@ function ProjectsPage() {
   useEffect(() => {
     loadProjects()
   }, [token])
+
+  useEffect(() => {
+    setScriptViewDraft(parseScriptView(yamlDraft))
+  }, [yamlDraft])
 
   function updateField(event) {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
@@ -437,6 +444,14 @@ function ProjectsPage() {
     setYamlDraft(event.target.value)
     setValidationResult(null)
     setValidationError('')
+  }
+
+  function handleScriptLineTextChange(sceneId, lineId, text) {
+    setScriptViewDraft((current) => updateSceneLineText(current, sceneId, lineId, text))
+  }
+
+  function handleScriptLineCharacterChange(sceneId, lineId, characterId) {
+    setScriptViewDraft((current) => updateSceneLineCharacter(current, sceneId, lineId, characterId))
   }
 
   return (
@@ -708,13 +723,20 @@ function ProjectsPage() {
               </button>
             </div>
             <div className="script-review-grid">
-              <textarea
-                className="yaml-editor"
-                value={yamlDraft}
-                onChange={handleYamlDraftChange}
-                readOnly={generating}
-                placeholder="生成后的 YAML 会显示在这里。"
-              />
+              <div className="script-edit-stack">
+                <ScriptViewEditor
+                  scriptView={scriptViewDraft}
+                  onLineTextChange={handleScriptLineTextChange}
+                  onLineCharacterChange={handleScriptLineCharacterChange}
+                />
+                <textarea
+                  className="yaml-editor"
+                  value={yamlDraft}
+                  onChange={handleYamlDraftChange}
+                  readOnly={generating}
+                  placeholder="生成后的 YAML 会显示在这里。"
+                />
+              </div>
               <YamlPreview
                 yamlContent={yamlDraft}
                 validationResult={validationResult}
