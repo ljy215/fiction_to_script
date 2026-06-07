@@ -2,12 +2,14 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.agents.script_profiles import ScriptType
+
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     novel_title: str | None = Field(default=None, max_length=180)
     original_author: str | None = Field(default=None, max_length=120)
-    script_type: str | None = Field(default=None, max_length=60)
+    script_type: ScriptType | None = None
     description: str | None = None
 
 
@@ -15,7 +17,7 @@ class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     novel_title: str | None = Field(default=None, max_length=180)
     original_author: str | None = Field(default=None, max_length=120)
-    script_type: str | None = Field(default=None, max_length=60)
+    script_type: ScriptType | None = None
     description: str | None = None
     status: str | None = Field(default=None, max_length=40)
 

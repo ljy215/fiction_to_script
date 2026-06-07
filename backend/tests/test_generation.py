@@ -204,6 +204,42 @@ class GenerationApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_all_script_types_route_to_agent_profiles(self):
+        cases = {
+            "short_drama": ("短剧剧本", "short_drama_script_graph"),
+            "film": ("影视剧本", "film_script_graph"),
+            "audio_drama": ("广播剧剧本", "audio_drama_script_graph"),
+            "stage_play": ("舞台剧剧本", "stage_play_script_graph"),
+        }
+
+        for script_type, (label, graph_name) in cases.items():
+            with self.subTest(script_type=script_type):
+                headers = self.auth_headers()
+                project_id = self.create_project(headers)
+                source_document_id = self.import_text(headers, project_id)
+
+                response = self.client.post(
+                    f"/projects/{project_id}/generation-tasks",
+                    headers=headers,
+                    json={"source_document_id": source_document_id, "script_type": script_type},
+                )
+
+                self.assertEqual(response.status_code, 201)
+                task = response.json()
+                task_response = self.client.get(
+                    f"/projects/{project_id}/generation-tasks/{task['id']}",
+                    headers=headers,
+                )
+                self.assertEqual(task_response.status_code, 200)
+                self.assertEqual(task_response.json()["status"], "succeeded")
+
+                script_response = self.client.get(f"/projects/{project_id}/scripts/latest", headers=headers)
+                self.assertEqual(script_response.status_code, 200)
+                yaml_content = script_response.json()["yaml_content"]
+                self.assertIn(f'script_type: "{script_type}"', yaml_content)
+                self.assertIn(f'script_type_label: "{label}"', yaml_content)
+                self.assertIn(f'graph_name: "{graph_name}"', yaml_content)
+
 
 if __name__ == "__main__":
     unittest.main()
