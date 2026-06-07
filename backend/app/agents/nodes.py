@@ -72,6 +72,37 @@ def event_extractor_node(state: GenerationGraphState) -> GenerationGraphState:
     return state
 
 
+def character_location_extractor_node(state: GenerationGraphState) -> GenerationGraphState:
+    state.start_node("character_location_extractor")
+    text = "\n".join(str(chapter["content"]) for chapter in state.chapters)
+    protagonist_name = "主人公"
+    for candidate in ("林晚", "旧友", "女主", "男主"):
+        if candidate in text:
+            protagonist_name = candidate
+            break
+
+    state.characters = [
+        {
+            "id": "char_001",
+            "name": protagonist_name,
+            "original_name": "" if state.source_language == "zh-CN" else protagonist_name,
+            "role": "protagonist",
+            "description": "从小说章节和事件中抽取出的核心行动人物。",
+        }
+    ]
+    state.locations = [
+        {
+            "id": "loc_001",
+            "name": "主要场景",
+            "original_name": "",
+            "type": "mixed",
+            "description": "承载前三章主要事件的综合场景。",
+        }
+    ]
+    state.finish_node("character_location_extractor")
+    return state
+
+
 def yaml_builder_node(
     state: GenerationGraphState,
     project: Project,

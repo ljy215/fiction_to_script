@@ -2,6 +2,7 @@ import unittest
 
 from app.agents.nodes import (
     chapter_summarizer_node,
+    character_location_extractor_node,
     document_parser_node,
     event_extractor_node,
     language_detector_node,
@@ -39,11 +40,14 @@ class AgentNodeTest(unittest.TestCase):
         state = language_detector_node(state, source)
         state = chapter_summarizer_node(state)
         state = event_extractor_node(state)
+        state = character_location_extractor_node(state)
 
         self.assertEqual(state.source_language, "zh-CN")
         self.assertEqual(state.chapters[0]["title"], "第一章")
         self.assertEqual(state.chapter_summaries[0]["chapter_id"], "ch_001")
         self.assertEqual(state.events[0]["id"], "evt_001")
+        self.assertEqual(state.characters[0]["id"], "char_001")
+        self.assertEqual(state.locations[0]["id"], "loc_001")
         self.assertIn("event_extractor", state.completed_nodes)
 
     def test_schema_validator_records_error_for_empty_yaml(self):

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.nodes import (
     chapter_summarizer_node,
+    character_location_extractor_node,
     document_parser_node,
     event_extractor_node,
     language_detector_node,
@@ -16,7 +17,17 @@ from app.agents.nodes import (
 )
 from app.agents.state import GenerationGraphState
 from app.config import get_settings
-from app.models import Chapter, ChapterSummary, GenerationTask, Project, ScriptDocument, SourceDocument, StoryEvent
+from app.models import (
+    Chapter,
+    ChapterSummary,
+    GenerationTask,
+    Project,
+    ScriptDocument,
+    SourceDocument,
+    StoryCharacter,
+    StoryEvent,
+    StoryLocation,
+)
 from app.services.bailian_client import BailianChatMessage, BailianClient, is_mock_bailian_api_key
 
 
@@ -246,6 +257,20 @@ def _persist_story_intermediates(
             StoryEvent.owner_id == task.owner_id,
         )
     )
+    db.execute(
+        delete(StoryCharacter).where(
+            StoryCharacter.project_id == task.project_id,
+            StoryCharacter.source_document_id == task.source_document_id,
+            StoryCharacter.owner_id == task.owner_id,
+        )
+    )
+    db.execute(
+        delete(StoryLocation).where(
+            StoryLocation.project_id == task.project_id,
+            StoryLocation.source_document_id == task.source_document_id,
+            StoryLocation.owner_id == task.owner_id,
+        )
+    )
 
     for summary in state.chapter_summaries:
         db.add(
@@ -257,6 +282,38 @@ def _persist_story_intermediates(
                 chapter_order=summary["order"],
                 chapter_title=summary["title"],
                 summary=summary["summary"],
+                provider=provider,
+                model=model,
+            )
+        )
+
+    for character in state.characters:
+        db.add(
+            StoryCharacter(
+                owner_id=task.owner_id,
+                project_id=task.project_id,
+                source_document_id=task.source_document_id,
+                character_key=character["id"],
+                name=character["name"],
+                original_name=character.get("original_name"),
+                role=character["role"],
+                description=character["description"],
+                provider=provider,
+                model=model,
+            )
+        )
+
+    for location in state.locations:
+        db.add(
+            StoryLocation(
+                owner_id=task.owner_id,
+                project_id=task.project_id,
+                source_document_id=task.source_document_id,
+                location_key=location["id"],
+                name=location["name"],
+                original_name=location.get("original_name"),
+                location_type=location["type"],
+                description=location["description"],
                 provider=provider,
                 model=model,
             )
@@ -326,6 +383,10 @@ def run_generation_task(db: Session, task_id: int) -> None:
 
         task.current_node = "event_extractor"
         state = event_extractor_node(state)
+        task.graph_state = state.model_dump_json(ensure_ascii=False)
+
+        task.current_node = "character_location_extractor"
+        state = character_location_extractor_node(state)
         task.graph_state = state.model_dump_json(ensure_ascii=False)
         _persist_story_intermediates(db, task, state, "mock", "mock-story-analyzer")
 
