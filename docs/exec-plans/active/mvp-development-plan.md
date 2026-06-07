@@ -543,7 +543,7 @@ backend/
 
 状态：已完成
 
-补充：真实百炼配置下由百炼生成 YAML；校验失败时调用百炼修复。仅 mock 配置使用本地兜底 YAML。
+补充：真实百炼配置下由百炼生成 YAML；校验失败时调用百炼修复。仅 mock 配置使用本地兜底 YAML。生成上下文、Prompt、YAML `script_config` 和 `generation.graph_name` 必须使用 PR-025 的剧本类型 agent profile。
 
 标题：生成完整中文 YAML 剧本
 
