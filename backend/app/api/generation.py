@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -40,6 +40,7 @@ def _get_owned_source_document(db: Session, project_id: int, owner_id: int, sour
 def create_generation_task(
     project_id: int,
     payload: GenerationTaskCreate,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
@@ -67,14 +68,14 @@ def create_generation_task(
         project_id=project_id,
         source_document_id=document.id,
         status="pending",
+        current_node="queued",
         progress=0,
     )
     db.add(task)
     db.commit()
     db.refresh(task)
 
-    run_generation_task(db, task.id)
-    db.refresh(task)
+    background_tasks.add_task(run_generation_task, db, task.id)
     return task
 
 
