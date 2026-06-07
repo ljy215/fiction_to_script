@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import Chapter, GenerationTask, Project, ScriptDocument, SourceDocument
+from app.services.bailian_client import BailianChatMessage, BailianClient, is_mock_bailian_api_key
 
 
 SCRIPT_TYPE_LABELS = {
@@ -184,8 +184,7 @@ def _mock_script_yaml(project: Project, source: SourceDocument, chapters: list[C
 
 def _is_mock_configured() -> bool:
     settings = get_settings()
-    api_key = settings.bailian_api_key.strip().lower()
-    return api_key in {"", "mock", "dev-placeholder-bailian-api-key"}
+    return is_mock_bailian_api_key(settings.bailian_api_key)
 
 
 def _build_prompt(project: Project, chapters: list[Chapter], script_type: str | None) -> str:
@@ -205,22 +204,13 @@ def _build_prompt(project: Project, chapters: list[Chapter], script_type: str | 
 def _call_bailian(project: Project, chapters: list[Chapter], script_type: str | None) -> str:
     settings = get_settings()
     prompt = _build_prompt(project, chapters, script_type)
-    response = httpx.post(
-        f"{settings.bailian_base_url.rstrip('/')}/chat/completions",
-        headers={"Authorization": f"Bearer {settings.bailian_api_key}"},
-        json={
-            "model": settings.bailian_model,
-            "messages": [
-                {"role": "system", "content": "你是专业中文编剧，只输出 YAML。"},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.4,
-        },
-        timeout=90,
+    return BailianClient.from_settings(settings).chat_completion(
+        messages=[
+            BailianChatMessage(role="system", content="你是专业中文编剧，只输出 YAML。"),
+            BailianChatMessage(role="user", content=prompt),
+        ],
+        temperature=0.4,
     )
-    response.raise_for_status()
-    payload = response.json()
-    return payload["choices"][0]["message"]["content"].strip()
 
 
 def run_generation_task(db: Session, task_id: int) -> None:
