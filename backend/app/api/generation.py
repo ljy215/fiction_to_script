@@ -8,7 +8,7 @@ from app.api.projects import get_owned_project
 from app.auth.dependencies import get_current_user
 from app.db import get_db
 from app.models import Chapter, GenerationTask, ScriptDocument, SourceDocument, User
-from app.schemas import GenerationTaskCreate, GenerationTaskRead, ScriptDocumentRead
+from app.schemas import GenerationTaskCreate, GenerationTaskRead, ScriptDocumentRead, ScriptDocumentUpdate
 from app.services.chapters import MINIMUM_CHAPTER_COUNT
 from app.services.script_generation import run_generation_task
 
@@ -104,4 +104,31 @@ def read_latest_script(
     ).scalar_one_or_none()
     if script is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Script document not found")
+    return script
+
+
+@router.patch("/scripts/{script_id}", response_model=ScriptDocumentRead)
+def update_script_document(
+    project_id: int,
+    script_id: int,
+    payload: ScriptDocumentUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    get_owned_project(db, project_id, current_user.id)
+    script = db.execute(
+        select(ScriptDocument).where(
+            ScriptDocument.id == script_id,
+            ScriptDocument.project_id == project_id,
+            ScriptDocument.owner_id == current_user.id,
+        )
+    ).scalar_one_or_none()
+    if script is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Script document not found")
+
+    script.yaml_content = payload.yaml_content
+    script.version_number += 1
+    db.add(script)
+    db.commit()
+    db.refresh(script)
     return script

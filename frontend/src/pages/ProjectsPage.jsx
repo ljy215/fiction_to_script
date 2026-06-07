@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { importPastedText, importTxtFile } from '../api/imports'
+import { createGenerationTask, fetchGenerationTask, fetchLatestScript, updateScript } from '../api/generation'
+import { importDocxFile, importPastedText, importTxtFile, listChapters } from '../api/imports'
 import { createProject, deleteProject, fetchProject, listProjects } from '../api/projects'
 import { useAuth } from '../stores/auth'
 
@@ -42,6 +43,18 @@ function formatDate(value) {
   }).format(new Date(value))
 }
 
+function downloadYaml(filename, content) {
+  const blob = new Blob([content], { type: 'text/yaml;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 function ProjectsPage() {
   const { token, user, logout } = useAuth()
   const [projects, setProjects] = useState([])
@@ -53,7 +66,13 @@ function ProjectsPage() {
   const [importText, setImportText] = useState('')
   const [importFile, setImportFile] = useState(null)
   const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState(null)
+  const [sourceDocument, setSourceDocument] = useState(null)
+  const [chapters, setChapters] = useState([])
+  const [generating, setGenerating] = useState(false)
+  const [savingScript, setSavingScript] = useState(false)
+  const [generationTask, setGenerationTask] = useState(null)
+  const [scriptDocument, setScriptDocument] = useState(null)
+  const [yamlDraft, setYamlDraft] = useState('')
   const [error, setError] = useState('')
 
   const selectedScriptTypeLabel = useMemo(() => {
@@ -62,6 +81,8 @@ function ProjectsPage() {
     }
     return scriptTypes.find((item) => item.value === selectedProject.script_type)?.label || selectedProject.script_type
   }, [selectedProject])
+
+  const canGenerate = Boolean(selectedProject && sourceDocument?.is_generation_ready)
 
   async function loadProjects() {
     setLoading(true)
@@ -88,10 +109,30 @@ function ProjectsPage() {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
   }
 
-  function resetImportState() {
+  function resetWorkspaceState() {
     setImportText('')
     setImportFile(null)
-    setImportResult(null)
+    setSourceDocument(null)
+    setChapters([])
+    setGenerationTask(null)
+    setScriptDocument(null)
+    setYamlDraft('')
+  }
+
+  async function loadChapters(projectId, documentId) {
+    const nextChapters = await listChapters(token, projectId, documentId)
+    setChapters(nextChapters)
+  }
+
+  async function loadLatestScript(projectId) {
+    try {
+      const latest = await fetchLatestScript(token, projectId)
+      setScriptDocument(latest)
+      setYamlDraft(latest.yaml_content)
+    } catch {
+      setScriptDocument(null)
+      setYamlDraft('')
+    }
   }
 
   async function handleCreate(event) {
@@ -108,7 +149,7 @@ function ProjectsPage() {
       })
       setProjects((current) => [project, ...current])
       setSelectedProject(project)
-      resetImportState()
+      resetWorkspaceState()
       setForm(initialForm)
     } catch (caughtError) {
       setError(caughtError.message)
@@ -122,7 +163,8 @@ function ProjectsPage() {
     try {
       const project = await fetchProject(token, projectId)
       setSelectedProject(project)
-      resetImportState()
+      resetWorkspaceState()
+      await loadLatestScript(projectId)
     } catch (caughtError) {
       setError(caughtError.message)
     }
@@ -136,13 +178,20 @@ function ProjectsPage() {
       setProjects((current) => current.filter((project) => project.id !== projectId))
       if (selectedProject?.id === projectId) {
         setSelectedProject(null)
-        resetImportState()
+        resetWorkspaceState()
       }
     } catch (caughtError) {
       setError(caughtError.message)
     } finally {
       setDeletingId(null)
     }
+  }
+
+  async function acceptImportedDocument(imported) {
+    setSourceDocument(imported)
+    setScriptDocument(null)
+    setYamlDraft('')
+    await loadChapters(imported.project_id, imported.id)
   }
 
   async function handleImportText(event) {
@@ -153,10 +202,9 @@ function ProjectsPage() {
 
     setImporting(true)
     setError('')
-    setImportResult(null)
     try {
       const imported = await importPastedText(token, selectedProject.id, importText)
-      setImportResult(imported)
+      await acceptImportedDocument(imported)
       setImportText('')
     } catch (caughtError) {
       setError(caughtError.message)
@@ -173,10 +221,13 @@ function ProjectsPage() {
 
     setImporting(true)
     setError('')
-    setImportResult(null)
     try {
-      const imported = await importTxtFile(token, selectedProject.id, importFile)
-      setImportResult(imported)
+      const extension = importFile.name.toLowerCase().split('.').pop()
+      const imported =
+        extension === 'docx'
+          ? await importDocxFile(token, selectedProject.id, importFile)
+          : await importTxtFile(token, selectedProject.id, importFile)
+      await acceptImportedDocument(imported)
       setImportFile(null)
       event.target.reset()
     } catch (caughtError) {
@@ -186,12 +237,70 @@ function ProjectsPage() {
     }
   }
 
+  async function handleGenerate() {
+    if (!selectedProject || !sourceDocument) {
+      return
+    }
+
+    setGenerating(true)
+    setError('')
+    try {
+      const task = await createGenerationTask(token, selectedProject.id, {
+        source_document_id: sourceDocument.id,
+        script_type: selectedProject.script_type
+      })
+      setGenerationTask(task)
+
+      const finalTask = task.status === 'succeeded' || task.status === 'failed'
+        ? task
+        : await fetchGenerationTask(token, selectedProject.id, task.id)
+      setGenerationTask(finalTask)
+
+      if (finalTask.status === 'succeeded') {
+        await loadLatestScript(selectedProject.id)
+        await loadProjects()
+      } else if (finalTask.error_message) {
+        setError(finalTask.error_message)
+      }
+    } catch (caughtError) {
+      setError(caughtError.message)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  function handleExport() {
+    if (!yamlDraft) {
+      return
+    }
+    const baseName = selectedProject?.novel_title || selectedProject?.name || 'script'
+    downloadYaml(`${baseName}.yaml`, yamlDraft)
+  }
+
+  async function handleSaveScript() {
+    if (!selectedProject || !scriptDocument || !yamlDraft) {
+      return
+    }
+
+    setSavingScript(true)
+    setError('')
+    try {
+      const updated = await updateScript(token, selectedProject.id, scriptDocument.id, yamlDraft)
+      setScriptDocument(updated)
+      setYamlDraft(updated.yaml_content)
+    } catch (caughtError) {
+      setError(caughtError.message)
+    } finally {
+      setSavingScript(false)
+    }
+  }
+
   return (
     <main className="app-shell compact">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Projects</p>
-          <h1>项目工作台</h1>
+          <p className="eyebrow">Novel to Script</p>
+          <h1>小说改编工作台</h1>
         </div>
         <button className="button secondary" type="button" onClick={logout}>
           退出登录
@@ -313,6 +422,7 @@ function ProjectsPage() {
               {statusLabels[selectedProject.status] || selectedProject.status}
             </span>
           </div>
+
           <dl className="detail-grid">
             <div>
               <dt>小说名称</dt>
@@ -331,54 +441,128 @@ function ProjectsPage() {
               <dd>{formatDate(selectedProject.created_at)}</dd>
             </div>
           </dl>
-          {selectedProject.description && <p className="detail-description">{selectedProject.description}</p>}
 
-          <div className="import-tools" aria-label="小说导入">
+          <div className="workflow-grid">
+            <section className="workflow-panel" aria-label="小说导入">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Step 1</p>
+                  <h2>导入小说</h2>
+                </div>
+              </div>
+              <div className="import-grid">
+                <form className="project-form import-form" onSubmit={handleImportText}>
+                  <label>
+                    粘贴文本
+                    <textarea
+                      required
+                      name="import_text"
+                      rows="8"
+                      value={importText}
+                      onChange={(event) => setImportText(event.target.value)}
+                    />
+                  </label>
+                  <button className="button primary full" type="submit" disabled={importing}>
+                    {importing ? '导入中...' : '导入粘贴文本'}
+                  </button>
+                </form>
+
+                <form className="project-form import-form" onSubmit={handleImportFile}>
+                  <label>
+                    上传文件
+                    <input
+                      required
+                      accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      name="source_file"
+                      type="file"
+                      onChange={(event) => setImportFile(event.target.files?.[0] || null)}
+                    />
+                  </label>
+                  <button className="button secondary full" type="submit" disabled={importing || !importFile}>
+                    {importing ? '导入中...' : '导入 txt / docx'}
+                  </button>
+                </form>
+              </div>
+            </section>
+
+            <section className="workflow-panel" aria-label="章节确认">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Step 2</p>
+                  <h2>章节确认</h2>
+                </div>
+                {sourceDocument && (
+                  <span className={`status-pill ${sourceDocument.is_generation_ready ? 'status-ready' : 'status-failed'}`}>
+                    {sourceDocument.chapter_count} / {sourceDocument.minimum_chapters_required} 章
+                  </span>
+                )}
+              </div>
+              {sourceDocument ? (
+                <>
+                  <p className="import-result">
+                    已导入 {sourceDocument.content_length} 个字符，来源：{sourceDocument.source_type}
+                  </p>
+                  <div className="chapter-list">
+                    {chapters.map((chapter) => (
+                      <article className="chapter-row" key={chapter.id}>
+                        <strong>{chapter.order}. {chapter.title}</strong>
+                        <span>{chapter.content_length} 字符</span>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="muted">导入小说后会在这里显示章节识别结果。</p>
+              )}
+            </section>
+
+            <section className="workflow-panel" aria-label="剧本生成">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Step 3</p>
+                  <h2>生成剧本</h2>
+                </div>
+                {generationTask && <span className="status-pill status-generating">{generationTask.status}</span>}
+              </div>
+              <button className="button primary full" type="button" onClick={handleGenerate} disabled={!canGenerate || generating}>
+                {generating ? '生成中...' : '生成中文 YAML 剧本'}
+              </button>
+              {sourceDocument && !sourceDocument.is_generation_ready && (
+                <p className="form-error">至少需要 3 章内容才能开始生成。</p>
+              )}
+              {generationTask && (
+                <div className="progress-track" aria-label="生成进度">
+                  <span style={{ width: `${generationTask.progress}%` }} />
+                </div>
+              )}
+            </section>
+          </div>
+
+          <section className="script-editor" aria-label="YAML 剧本编辑器">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Import</p>
-                <h2>导入小说文本</h2>
+                <p className="eyebrow">Script</p>
+                <h2>YAML 剧本</h2>
               </div>
+              <button className="button secondary" type="button" onClick={handleExport} disabled={!yamlDraft}>
+                导出 YAML
+              </button>
+              <button className="button primary" type="button" onClick={handleSaveScript} disabled={!scriptDocument || !yamlDraft || savingScript}>
+                {savingScript ? '保存中...' : '保存'}
+              </button>
             </div>
-            <div className="import-grid">
-              <form className="project-form import-form" onSubmit={handleImportText}>
-                <label>
-                  粘贴文本
-                  <textarea
-                    required
-                    name="import_text"
-                    rows="8"
-                    value={importText}
-                    onChange={(event) => setImportText(event.target.value)}
-                  />
-                </label>
-                <button className="button primary full" type="submit" disabled={importing}>
-                  {importing ? '导入中...' : '导入粘贴文本'}
-                </button>
-              </form>
-
-              <form className="project-form import-form" onSubmit={handleImportFile}>
-                <label>
-                  txt 文件
-                  <input
-                    required
-                    accept=".txt,text/plain"
-                    name="txt_file"
-                    type="file"
-                    onChange={(event) => setImportFile(event.target.files?.[0] || null)}
-                  />
-                </label>
-                <button className="button secondary full" type="submit" disabled={importing || !importFile}>
-                  {importing ? '导入中...' : '导入 txt 文件'}
-                </button>
-              </form>
-            </div>
-            {importResult && (
-              <p className="import-result">
-                已导入 {importResult.content_length} 个字符，来源：{importResult.source_type}
+            <textarea
+              className="yaml-editor"
+              value={yamlDraft}
+              onChange={(event) => setYamlDraft(event.target.value)}
+              placeholder="生成后的 YAML 会显示在这里。"
+            />
+            {scriptDocument && (
+              <p className="muted">
+                当前版本：v{scriptDocument.version_number} · 更新时间 {formatDate(scriptDocument.updated_at)}
               </p>
             )}
-          </div>
+          </section>
         </section>
       )}
     </main>

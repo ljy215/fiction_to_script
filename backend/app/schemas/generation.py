@@ -23,6 +23,10 @@ class ScriptDocumentRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ScriptDocumentUpdate(BaseModel):
+    yaml_content: str = Field(min_length=1)
+
+
 class GenerationTaskRead(BaseModel):
     id: int
     owner_id: int

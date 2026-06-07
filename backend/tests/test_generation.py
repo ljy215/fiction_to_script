@@ -107,6 +107,17 @@ class GenerationApiTest(unittest.TestCase):
         self.assertIn('schema_version: "1.0"', script["yaml_content"])
         self.assertIn("雨夜来信 改编剧本", script["yaml_content"])
 
+        update_response = self.client.patch(
+            f"/projects/{project_id}/scripts/{script['id']}",
+            headers=headers,
+            json={"yaml_content": script["yaml_content"] + "\n# edited"},
+        )
+
+        self.assertEqual(update_response.status_code, 200)
+        updated = update_response.json()
+        self.assertEqual(updated["version_number"], 2)
+        self.assertTrue(updated["yaml_content"].endswith("# edited"))
+
     def test_generation_requires_three_chapters(self):
         headers = self.auth_headers()
         project_id = self.create_project(headers)
