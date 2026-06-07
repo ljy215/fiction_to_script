@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from app.db import Base, get_db
 from app.main import app
 from app.models import ChapterSummary, StoryCharacter, StoryEvent, StoryLocation
+from app.services.script_validation import validate_script_yaml
 from app.storage import LocalFileStorage, get_file_storage
 
 
@@ -130,8 +131,13 @@ class GenerationApiTest(unittest.TestCase):
 
         self.assertEqual(script_response.status_code, 200)
         script = script_response.json()
-        self.assertIn('schema_version: "1.0"', script["yaml_content"])
-        self.assertIn("雨夜来信 改编剧本", script["yaml_content"])
+        self.assertIn("schema_version:", script["yaml_content"])
+        self.assertIn("adaptation:", script["yaml_content"])
+        self.assertIn("script:", script["yaml_content"])
+        self.assertIn("sc_003", script["yaml_content"])
+        self.assertIn("evt_003", script["yaml_content"])
+        validation_result = validate_script_yaml(script["yaml_content"])
+        self.assertTrue(validation_result["valid"], validation_result["errors"])
 
         update_response = self.client.patch(
             f"/projects/{project_id}/scripts/{script['id']}",

@@ -16,6 +16,8 @@ class GenerationGraphState(BaseModel):
     events: list[dict[str, Any]] = Field(default_factory=list)
     characters: list[dict[str, Any]] = Field(default_factory=list)
     locations: list[dict[str, Any]] = Field(default_factory=list)
+    adaptation: dict[str, Any] = Field(default_factory=dict)
+    scenes: list[dict[str, Any]] = Field(default_factory=list)
     yaml_content: str | None = None
     errors: list[str] = Field(default_factory=list)
 
@@ -30,3 +32,6 @@ class GenerationGraphState(BaseModel):
     def fail(self, message: str) -> None:
         self.errors.append(message)
         self.current_node = "failed"
+
+    def clear_errors(self) -> None:
+        self.errors = []

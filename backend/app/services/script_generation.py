@@ -1,18 +1,20 @@
 from datetime import datetime, timezone
 import json
 
-import httpx
+import yaml
 from sqlalchemy import delete, select
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.nodes import (
+    adaptation_planner_node,
     chapter_summarizer_node,
     character_location_extractor_node,
     document_parser_node,
     event_extractor_node,
     language_detector_node,
     schema_validator_node,
+    script_writer_node,
+    yaml_repair_node,
     yaml_builder_node,
 )
 from app.agents.state import GenerationGraphState
@@ -236,6 +238,120 @@ def _call_bailian(project: Project, chapters: list[Chapter], script_type: str | 
     )
 
 
+def _build_complete_yaml(
+    project: Project,
+    source: SourceDocument,
+    state: GenerationGraphState,
+    provider: str,
+    model: str,
+) -> str:
+    now = datetime.now(timezone.utc).isoformat()
+    title = project.novel_title or project.name
+    script_type = state.script_type or project.script_type or "film"
+    script_type_label = SCRIPT_TYPE_LABELS.get(script_type, script_type)
+    chapters = [
+        {
+            "id": summary["chapter_id"],
+            "order": summary["order"],
+            "title": summary["title"],
+            "summary": summary["summary"],
+        }
+        for summary in state.chapter_summaries
+    ]
+    characters = [
+        {
+            "id": character["id"],
+            "name": character["name"],
+            "original_name": character.get("original_name") or "",
+            "aliases": character.get("aliases", []),
+            "role": character["role"],
+            "description": character["description"],
+            "motivation": character.get("motivation", "追查事件真相并完成关键选择。"),
+            "arc": character.get("arc", "从被动卷入到主动行动。"),
+            "source_refs": [{"chapter_id": chapters[0]["id"]}] if chapters else [],
+        }
+        for character in state.characters
+    ]
+    locations = [
+        {
+            "id": location["id"],
+            "name": location["name"],
+            "original_name": location.get("original_name") or "",
+            "type": location["type"],
+            "description": location["description"],
+            "source_refs": [{"chapter_id": chapters[0]["id"]}] if chapters else [],
+        }
+        for location in state.locations
+    ]
+    events = [
+        {
+            "id": event["id"],
+            "chapter_id": event["chapter_id"],
+            "order": event["order"],
+            "summary": event["summary"],
+            "participants": event["participants"],
+            "location_id": event["location_id"],
+            "consequence": event["consequence"],
+            "fidelity_note": "根据原文章节顺序保留核心事件。",
+        }
+        for event in state.events
+    ]
+    document_id = f"script_doc_{project.id:03d}"
+    payload = {
+        "schema_version": "1.0",
+        "document": {
+            "id": document_id,
+            "project_id": f"project_{project.id:03d}",
+            "title": f"{title} 改编剧本",
+            "status": "draft",
+            "created_at": now,
+            "updated_at": now,
+        },
+        "source": {
+            "novel_title": project.novel_title or project.name,
+            "original_author": project.original_author or "未知",
+            "source_language": state.source_language,
+            "output_language": state.output_language,
+            "minimum_chapters_required": 3,
+            "chapter_count": len(chapters),
+            "input_files": [],
+            "chapters": chapters,
+        },
+        "script_config": {
+            "script_type": script_type,
+            "script_type_label": script_type_label,
+            "fidelity_policy": "faithful",
+            "output_mode": "single_document",
+        },
+        "generation": {
+            "provider": provider,
+            "model": model,
+            "graph_name": "mvp_script_generation_graph",
+            "graph_version": "1.0",
+            "generated_at": now,
+            "agent_runs": [{"node": node, "status": "success"} for node in state.completed_nodes],
+        },
+        "characters": characters,
+        "locations": locations,
+        "events": events,
+        "adaptation": state.adaptation,
+        "script": {"scenes": state.scenes},
+        "editor_state": {
+            "current_version_id": "version_001",
+            "last_saved_at": now,
+        },
+        "notes": [
+            {
+                "id": "note_001",
+                "target_id": document_id,
+                "level": "suggestion",
+                "text": "可以在编辑器中继续细化对白、场景调度和人物弧光。",
+            }
+        ],
+    }
+    return yaml.safe_dump(payload, allow_unicode=True, sort_keys=False, width=120)
+
+
 def _persist_story_intermediates(
     db: Session,
     task: GenerationTask,
@@ -390,12 +506,21 @@ def run_generation_task(db: Session, task_id: int) -> None:
         task.graph_state = state.model_dump_json(ensure_ascii=False)
         _persist_story_intermediates(db, task, state, "mock", "mock-story-analyzer")
 
-        task.progress = 70
+        task.progress = 60
+        task.current_node = "adaptation_planner"
+        state = adaptation_planner_node(state, project)
+        task.graph_state = state.model_dump_json(ensure_ascii=False)
+
+        task.current_node = "script_writer"
+        state = script_writer_node(state)
+        task.graph_state = state.model_dump_json(ensure_ascii=False)
+
+        task.progress = 75
         provider = "mock" if _is_mock_configured() else "aliyun_bailian"
         task.provider = provider
         task.model = "mock-script-writer" if provider == "mock" else get_settings().bailian_model
         yaml_content = (
-            _mock_script_yaml(project, source, chapters, project.script_type)
+            _build_complete_yaml(project, source, state, provider, task.model)
             if provider == "mock"
             else _call_bailian(project, chapters, project.script_type)
         )
@@ -406,7 +531,16 @@ def run_generation_task(db: Session, task_id: int) -> None:
         task.current_node = "schema_validator"
         state = schema_validator_node(state)
         if state.errors:
-            raise ValueError("; ".join(state.errors))
+            task.current_node = "yaml_repair"
+            repaired_yaml = _build_complete_yaml(project, source, state, "mock", "mock-yaml-repair")
+            state = yaml_repair_node(state, repaired_yaml)
+            task.graph_state = state.model_dump_json(ensure_ascii=False)
+
+            task.current_node = "schema_validator"
+            state = schema_validator_node(state)
+            if state.errors:
+                raise ValueError("; ".join(state.errors))
+            yaml_content = state.yaml_content or repaired_yaml
         task.graph_state = state.model_dump_json(ensure_ascii=False)
 
         script = ScriptDocument(

@@ -1,15 +1,17 @@
 import unittest
 
 from app.agents.nodes import (
+    adaptation_planner_node,
     chapter_summarizer_node,
     character_location_extractor_node,
     document_parser_node,
     event_extractor_node,
     language_detector_node,
     schema_validator_node,
+    script_writer_node,
 )
 from app.agents.state import GenerationGraphState
-from app.models import Chapter, SourceDocument
+from app.models import Chapter, Project, SourceDocument
 
 
 class AgentNodeTest(unittest.TestCase):
@@ -41,6 +43,11 @@ class AgentNodeTest(unittest.TestCase):
         state = chapter_summarizer_node(state)
         state = event_extractor_node(state)
         state = character_location_extractor_node(state)
+        state = adaptation_planner_node(
+            state,
+            Project(id=1, owner_id=1, name="Test Project", novel_title="Test Novel", script_type="film"),
+        )
+        state = script_writer_node(state)
 
         self.assertEqual(state.source_language, "zh-CN")
         self.assertEqual(state.chapters[0]["title"], "第一章")
@@ -48,6 +55,8 @@ class AgentNodeTest(unittest.TestCase):
         self.assertEqual(state.events[0]["id"], "evt_001")
         self.assertEqual(state.characters[0]["id"], "char_001")
         self.assertEqual(state.locations[0]["id"], "loc_001")
+        self.assertEqual(state.adaptation["strategy"]["preserved_events"], ["evt_001"])
+        self.assertEqual(state.scenes[0]["source_refs"][0]["event_id"], "evt_001")
         self.assertIn("event_extractor", state.completed_nodes)
 
     def test_schema_validator_records_error_for_empty_yaml(self):
