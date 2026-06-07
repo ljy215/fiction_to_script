@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
+import json
 
+import httpx
+from sqlalchemy import delete, select
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,7 +16,7 @@ from app.agents.nodes import (
 )
 from app.agents.state import GenerationGraphState
 from app.config import get_settings
-from app.models import Chapter, GenerationTask, Project, ScriptDocument, SourceDocument
+from app.models import Chapter, ChapterSummary, GenerationTask, Project, ScriptDocument, SourceDocument, StoryEvent
 from app.services.bailian_client import BailianChatMessage, BailianClient, is_mock_bailian_api_key
 
 
@@ -222,6 +225,62 @@ def _call_bailian(project: Project, chapters: list[Chapter], script_type: str | 
     )
 
 
+def _persist_story_intermediates(
+    db: Session,
+    task: GenerationTask,
+    state: GenerationGraphState,
+    provider: str,
+    model: str,
+) -> None:
+    db.execute(
+        delete(ChapterSummary).where(
+            ChapterSummary.project_id == task.project_id,
+            ChapterSummary.source_document_id == task.source_document_id,
+            ChapterSummary.owner_id == task.owner_id,
+        )
+    )
+    db.execute(
+        delete(StoryEvent).where(
+            StoryEvent.project_id == task.project_id,
+            StoryEvent.source_document_id == task.source_document_id,
+            StoryEvent.owner_id == task.owner_id,
+        )
+    )
+
+    for summary in state.chapter_summaries:
+        db.add(
+            ChapterSummary(
+                owner_id=task.owner_id,
+                project_id=task.project_id,
+                source_document_id=task.source_document_id,
+                chapter_id=summary["database_id"],
+                chapter_order=summary["order"],
+                chapter_title=summary["title"],
+                summary=summary["summary"],
+                provider=provider,
+                model=model,
+            )
+        )
+
+    for event in state.events:
+        db.add(
+            StoryEvent(
+                owner_id=task.owner_id,
+                project_id=task.project_id,
+                source_document_id=task.source_document_id,
+                chapter_id=event["chapter_database_id"],
+                event_key=event["id"],
+                event_order=event["order"],
+                summary=event["summary"],
+                participants_json=json.dumps(event["participants"], ensure_ascii=False),
+                location_name=event.get("location_name"),
+                consequence=event["consequence"],
+                provider=provider,
+                model=model,
+            )
+        )
+
+
 def run_generation_task(db: Session, task_id: int) -> None:
     task = db.get(GenerationTask, task_id)
     if task is None:
@@ -268,6 +327,7 @@ def run_generation_task(db: Session, task_id: int) -> None:
         task.current_node = "event_extractor"
         state = event_extractor_node(state)
         task.graph_state = state.model_dump_json(ensure_ascii=False)
+        _persist_story_intermediates(db, task, state, "mock", "mock-story-analyzer")
 
         task.progress = 70
         provider = "mock" if _is_mock_configured() else "aliyun_bailian"

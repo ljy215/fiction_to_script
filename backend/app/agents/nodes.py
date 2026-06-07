@@ -39,9 +39,10 @@ def chapter_summarizer_node(state: GenerationGraphState) -> GenerationGraphState
     state.chapter_summaries = [
         {
             "chapter_id": chapter["id"],
+            "database_id": chapter["database_id"],
             "order": chapter["order"],
             "title": chapter["title"],
-            "summary": str(chapter["content"])[:120].replace("\n", " "),
+            "summary": f"{chapter['title']}：{str(chapter['content'])[:120].replace(chr(10), ' ')}",
         }
         for chapter in state.chapters
     ]
@@ -57,10 +58,12 @@ def event_extractor_node(state: GenerationGraphState) -> GenerationGraphState:
             {
                 "id": f"evt_{summary['order']:03d}",
                 "chapter_id": summary["chapter_id"],
+                "chapter_database_id": summary["database_id"],
                 "order": summary["order"],
                 "summary": summary["summary"],
                 "participants": ["char_001"],
                 "location_id": "loc_001",
+                "location_name": "主要场景",
                 "consequence": "推动主人公继续行动。",
             }
         )
