@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agents.state import GenerationGraphState
 from app.config import get_settings
 from app.models import Chapter, GenerationTask, Project, ScriptDocument, SourceDocument
 from app.services.bailian_client import BailianChatMessage, BailianClient, is_mock_bailian_api_key
@@ -220,6 +221,7 @@ def run_generation_task(db: Session, task_id: int) -> None:
 
     try:
         task.status = "running"
+        task.current_node = "document_parser"
         task.progress = 20
         project = db.get(Project, task.project_id)
         source = db.get(SourceDocument, task.source_document_id)
@@ -238,7 +240,26 @@ def run_generation_task(db: Session, task_id: int) -> None:
         if len(chapters) < 3:
             raise ValueError("At least 3 chapters are required before generation")
 
+        state = GenerationGraphState(
+            project_id=project.id,
+            source_document_id=source.id,
+            script_type=project.script_type,
+            chapters=[
+                {
+                    "id": f"ch_{chapter.order:03d}",
+                    "database_id": chapter.id,
+                    "order": chapter.order,
+                    "title": chapter.title,
+                    "content_length": chapter.content_length,
+                }
+                for chapter in chapters
+            ],
+        )
+        state.finish_node("document_parser")
+        task.graph_state = state.model_dump_json(ensure_ascii=False)
+
         task.progress = 55
+        task.current_node = "yaml_builder"
         provider = "mock" if _is_mock_configured() else "aliyun_bailian"
         task.provider = provider
         task.model = "mock-script-writer" if provider == "mock" else get_settings().bailian_model
@@ -247,6 +268,9 @@ def run_generation_task(db: Session, task_id: int) -> None:
             if provider == "mock"
             else _call_bailian(project, chapters, project.script_type)
         )
+        state.yaml_content = yaml_content
+        state.finish_node("yaml_builder")
+        task.graph_state = state.model_dump_json(ensure_ascii=False)
 
         script = ScriptDocument(
             owner_id=task.owner_id,
@@ -262,12 +286,14 @@ def run_generation_task(db: Session, task_id: int) -> None:
 
         task.script_document_id = script.id
         task.status = "succeeded"
+        task.current_node = "done"
         task.progress = 100
         task.finished_at = datetime.now(timezone.utc)
         project.status = "ready"
         db.commit()
     except Exception as exc:
         task.status = "failed"
+        task.current_node = "failed"
         task.error_message = str(exc)
         task.progress = 100
         task.finished_at = datetime.now(timezone.utc)

@@ -15,8 +15,10 @@ class GenerationTask(Base):
     source_document_id: Mapped[int] = mapped_column(ForeignKey("source_documents.id"), index=True)
     script_document_id: Mapped[int | None] = mapped_column(ForeignKey("script_documents.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(40), default="pending")
+    current_node: Mapped[str] = mapped_column(String(80), default="queued")
     provider: Mapped[str] = mapped_column(String(80), default="mock")
     model: Mapped[str] = mapped_column(String(120), default="mock-script-writer")
+    graph_state: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     progress: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(

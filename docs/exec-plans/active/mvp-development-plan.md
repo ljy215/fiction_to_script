@@ -449,7 +449,7 @@ backend/
 
 ### PR-021：LangGraph 状态与任务表
 
-状态：部分完成（任务表与状态轮询 API 已完成，LangGraph 节点骨架待后续 PR）
+状态：已完成
 
 标题：添加 LangGraph 状态对象和生成任务模型
 

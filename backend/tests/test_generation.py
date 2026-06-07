@@ -96,9 +96,17 @@ class GenerationApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         task = response.json()
+        task_response = self.client.get(
+            f"/projects/{project_id}/generation-tasks/{task['id']}",
+            headers=headers,
+        )
+        self.assertEqual(task_response.status_code, 200)
+        task = task_response.json()
         self.assertEqual(task["status"], "succeeded")
+        self.assertEqual(task["current_node"], "done")
         self.assertEqual(task["provider"], "mock")
         self.assertIsNotNone(task["script_document_id"])
+        self.assertIn("document_parser", task["graph_state"])
 
         script_response = self.client.get(f"/projects/{project_id}/scripts/latest", headers=headers)
 

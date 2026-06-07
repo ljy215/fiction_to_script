@@ -48,8 +48,10 @@ class GenerationTaskRead(BaseModel):
     source_document_id: int
     script_document_id: int | None
     status: str
+    current_node: str
     provider: str
     model: str
+    graph_state: str | None
     error_message: str | None
     progress: int
     created_at: datetime
