@@ -10,6 +10,7 @@ _CHAPTER_HEADING_RE = re.compile(
     r"chapter\s+\d+(?:\s*[:：.\-]?\s*[^\n]{0,60})?)\s*$",
     re.IGNORECASE,
 )
+_CHINESE_BODY_SENTENCE_RE = re.compile(rf"^\s*第[\d{_CHINESE_NUMERAL}]+[章节回卷集部篇][的了在是中]")
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,8 @@ class ParsedChapter:
 def _is_heading(line: str) -> bool:
     candidate = line.strip()
     if not candidate or len(candidate) > 80:
+        return False
+    if _CHINESE_BODY_SENTENCE_RE.match(candidate):
         return False
     return bool(_CHAPTER_HEADING_RE.match(candidate))
 

@@ -1,5 +1,9 @@
 from pathlib import Path
+from html.parser import HTMLParser
+import re
 from typing import Annotated
+from zipfile import BadZipFile, ZipFile
+import xml.etree.ElementTree as ET
 
 from docx import Document
 from docx.opc.exceptions import PackageNotFoundError
@@ -92,6 +96,117 @@ def _extract_docx_text(path: Path) -> str:
                 parts.append(" | ".join(cells))
 
     return _clean_text("\n".join(parts))
+
+
+_PDF_LITERAL_TEXT_RE = re.compile(rb"\((?:\\.|[^\\()])*\)\s*Tj")
+
+
+class _HtmlTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style"}:
+            self._skip_depth += 1
+        if tag in {"p", "div", "section", "article", "h1", "h2", "h3", "br"}:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style"} and self._skip_depth:
+            self._skip_depth -= 1
+        if tag in {"p", "div", "section", "article", "h1", "h2", "h3"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth and data.strip():
+            self.parts.append(data.strip())
+
+    def text(self) -> str:
+        joined = " ".join(self.parts)
+        joined = re.sub(r"[ \t]*\n[ \t]*", "\n", joined)
+        joined = re.sub(r"\n{2,}", "\n", joined)
+        joined = re.sub(r"[ \t]{2,}", " ", joined)
+        return joined.strip()
+
+
+def _decode_pdf_literal(raw: bytes) -> str:
+    inner = raw[1 : raw.rfind(b")")]
+    text = inner.decode("latin-1", errors="ignore")
+    replacements = {
+        r"\\": "\\",
+        r"\(": "(",
+        r"\)": ")",
+        r"\n": "\n",
+        r"\r": "\n",
+        r"\t": "\t",
+    }
+    for source, target in replacements.items():
+        text = text.replace(source, target)
+    return text
+
+
+def _extract_pdf_text(path: Path) -> str:
+    content = path.read_bytes()
+    parts: list[str] = []
+    for match in _PDF_LITERAL_TEXT_RE.finditer(content):
+        literal = match.group(0).rsplit(b")", 1)[0] + b")"
+        text = _decode_pdf_literal(literal).strip()
+        if text:
+            parts.append(text)
+
+    if not parts:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="PDF text cannot be extracted. Scanned PDFs are not supported in the MVP.",
+        )
+    return _clean_text("\n".join(parts))
+
+
+def _extract_epub_text(path: Path) -> str:
+    try:
+        with ZipFile(path) as archive:
+            container_xml = archive.read("META-INF/container.xml")
+            container = ET.fromstring(container_xml)
+            rootfile = container.find(".//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile")
+            if rootfile is None:
+                raise ValueError("EPUB container does not declare a rootfile")
+
+            opf_path = rootfile.attrib["full-path"]
+            opf_dir = Path(opf_path).parent
+            opf = ET.fromstring(archive.read(opf_path))
+            manifest: dict[str, str] = {}
+            for item in opf.findall(".//{http://www.idpf.org/2007/opf}item"):
+                item_id = item.attrib.get("id")
+                href = item.attrib.get("href")
+                if item_id and href:
+                    manifest[item_id] = str((opf_dir / href).as_posix()).removeprefix("./")
+
+            parts: list[str] = []
+            for itemref in opf.findall(".//{http://www.idpf.org/2007/opf}itemref"):
+                item_id = itemref.attrib.get("idref")
+                href = manifest.get(item_id or "")
+                if not href:
+                    continue
+                html = archive.read(href).decode("utf-8", errors="ignore")
+                extractor = _HtmlTextExtractor()
+                extractor.feed(html)
+                text = extractor.text()
+                if text:
+                    parts.append(text)
+    except (BadZipFile, ET.ParseError, KeyError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="EPUB file cannot be parsed",
+        ) from exc
+
+    if not parts:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="EPUB text cannot be extracted",
+        )
+    return _clean_text("\n\n".join(parts))
 
 
 def _create_source_document(
@@ -208,6 +323,70 @@ def import_docx_file(
         project_id=project_id,
         stored_file_id=stored_file.id,
         source_type="docx_file",
+        original_filename=stored_file.original_filename,
+        text=text,
+    )
+
+
+@router.post("/pdf", response_model=SourceDocumentRead, status_code=status.HTTP_201_CREATED)
+def import_pdf_file(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    storage: Annotated[LocalFileStorage, Depends(get_file_storage)],
+    file: UploadFile = File(...),
+):
+    get_owned_project(db, project_id, current_user.id)
+
+    filename = _require_extension(file.filename or "", ".pdf")
+    stored_file, stored_path = _save_uploaded_file(
+        db=db,
+        storage=storage,
+        file=file,
+        owner_id=current_user.id,
+        project_id=project_id,
+        filename=filename,
+    )
+
+    text = _extract_pdf_text(stored_path)
+    return _create_source_document(
+        db=db,
+        owner_id=current_user.id,
+        project_id=project_id,
+        stored_file_id=stored_file.id,
+        source_type="pdf_file",
+        original_filename=stored_file.original_filename,
+        text=text,
+    )
+
+
+@router.post("/epub", response_model=SourceDocumentRead, status_code=status.HTTP_201_CREATED)
+def import_epub_file(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    storage: Annotated[LocalFileStorage, Depends(get_file_storage)],
+    file: UploadFile = File(...),
+):
+    get_owned_project(db, project_id, current_user.id)
+
+    filename = _require_extension(file.filename or "", ".epub")
+    stored_file, stored_path = _save_uploaded_file(
+        db=db,
+        storage=storage,
+        file=file,
+        owner_id=current_user.id,
+        project_id=project_id,
+        filename=filename,
+    )
+
+    text = _extract_epub_text(stored_path)
+    return _create_source_document(
+        db=db,
+        owner_id=current_user.id,
+        project_id=project_id,
+        stored_file_id=stored_file.id,
+        source_type="epub_file",
         original_filename=stored_file.original_filename,
         text=text,
     )
