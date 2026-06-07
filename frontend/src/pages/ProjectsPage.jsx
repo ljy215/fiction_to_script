@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { createGenerationTask, fetchGenerationTask, fetchLatestScript, updateScript, validateScriptYaml } from '../api/generation'
+import { createGenerationTask, fetchLatestScript, streamGenerationTask, updateScript, validateScriptYaml } from '../api/generation'
 import { importDocxFile, importEpubFile, importPastedText, importPdfFile, importTxtFile, listChapters } from '../api/imports'
 import { createProject, deleteProject, fetchProject, listProjects } from '../api/projects'
 import YamlPreview from '../components/YamlPreview'
@@ -19,6 +19,22 @@ const statusLabels = {
   generating: '生成中',
   ready: '已生成',
   failed: '失败'
+}
+
+const generationNodeLabels = {
+  queued: '排队中',
+  document_parser: '解析小说章节',
+  language_detector: '识别源语言',
+  chapter_summarizer: '提炼章节摘要',
+  event_extractor: '抽取关键事件',
+  character_location_extractor: '抽取人物与场景',
+  adaptation_planner: '规划改编方案',
+  script_writer: '拆分剧本场次',
+  yaml_builder: '生成 YAML 正文',
+  schema_validator: '校验 YAML Schema',
+  yaml_repair: '修复 YAML 结构',
+  done: '生成完成',
+  failed: '生成失败'
 }
 
 const initialForm = {
@@ -54,6 +70,79 @@ function downloadYaml(filename, content) {
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+function parseGraphState(task) {
+  if (!task?.graph_state) {
+    return null
+  }
+
+  try {
+    return JSON.parse(task.graph_state)
+  } catch {
+    return null
+  }
+}
+
+function formatGenerationStream(task) {
+  if (!task) {
+    return ''
+  }
+
+  const state = parseGraphState(task)
+  if (state?.yaml_content) {
+    return state.yaml_content
+  }
+
+  const currentNode = task.current_node || 'queued'
+  const lines = [
+    '# 正在生成中文 YAML 剧本',
+    `status: ${task.status}`,
+    `progress: ${task.progress || 0}%`,
+    `current_node: ${currentNode}`,
+    `current_step: ${generationNodeLabels[currentNode] || currentNode}`,
+    ''
+  ]
+
+  if (task.error_message) {
+    lines.push(`error_message: ${task.error_message}`)
+    lines.push('')
+  }
+
+  if (state?.completed_nodes?.length) {
+    lines.push('completed_nodes:')
+    state.completed_nodes.forEach((node) => {
+      lines.push(`  - ${node}`)
+    })
+    lines.push('')
+  }
+
+  if (state?.chapter_summaries?.length) {
+    lines.push('chapter_summaries:')
+    state.chapter_summaries.slice(0, 6).forEach((chapter) => {
+      lines.push(`  - id: ${chapter.chapter_id}`)
+      lines.push(`    title: ${chapter.title}`)
+      lines.push(`    summary: ${chapter.summary}`)
+    })
+    lines.push('')
+  }
+
+  if (state?.events?.length) {
+    lines.push('events:')
+    state.events.slice(0, 8).forEach((event) => {
+      lines.push(`  - id: ${event.id}`)
+      lines.push(`    summary: ${event.summary}`)
+    })
+    lines.push('')
+  }
+
+  return lines.join('\n')
 }
 
 function ProjectsPage() {
@@ -260,22 +349,35 @@ function ProjectsPage() {
 
     setGenerating(true)
     setError('')
+    setScriptDocument(null)
+    setValidationResult(null)
+    setValidationError('')
     try {
       const task = await createGenerationTask(token, selectedProject.id, {
         source_document_id: sourceDocument.id,
         script_type: selectedProject.script_type
       })
       setGenerationTask(task)
+      setYamlDraft(formatGenerationStream(task))
 
-      const finalTask = task.status === 'succeeded' || task.status === 'failed'
-        ? task
-        : await fetchGenerationTask(token, selectedProject.id, task.id)
-      setGenerationTask(finalTask)
+      const finalTask = await streamGenerationTask(token, selectedProject.id, task.id, (nextTask) => {
+        setGenerationTask(nextTask)
+        setYamlDraft(formatGenerationStream(nextTask))
+      })
 
       if (finalTask.status === 'succeeded') {
-        await loadLatestScript(selectedProject.id)
+        const latest = await fetchLatestScript(token, selectedProject.id)
+        setScriptDocument(latest)
+        setValidationResult(null)
+        setValidationError('')
+        setYamlDraft('')
+        for (let index = 0; index < latest.yaml_content.length; index += 240) {
+          setYamlDraft(latest.yaml_content.slice(0, index + 240))
+          await delay(16)
+        }
         await loadProjects()
       } else if (finalTask.error_message) {
+        setYamlDraft(formatGenerationStream(finalTask))
         setError(finalTask.error_message)
       }
     } catch (caughtError) {
@@ -576,8 +678,14 @@ function ProjectsPage() {
                 <p className="form-error">至少需要 3 章内容才能开始生成。</p>
               )}
               {generationTask && (
-                <div className="progress-track" aria-label="生成进度">
-                  <span style={{ width: `${generationTask.progress}%` }} />
+                <div className="generation-progress" aria-label="生成进度">
+                  <div className="progress-meta">
+                    <span>{generationNodeLabels[generationTask.current_node] || generationTask.current_node}</span>
+                    <strong>{generationTask.progress}%</strong>
+                  </div>
+                  <div className="progress-track">
+                    <span style={{ width: `${generationTask.progress}%` }} />
+                  </div>
                 </div>
               )}
             </section>
@@ -604,6 +712,7 @@ function ProjectsPage() {
                 className="yaml-editor"
                 value={yamlDraft}
                 onChange={handleYamlDraftChange}
+                readOnly={generating}
                 placeholder="生成后的 YAML 会显示在这里。"
               />
               <YamlPreview

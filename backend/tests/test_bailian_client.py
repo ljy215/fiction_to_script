@@ -118,6 +118,34 @@ class BailianClientTest(unittest.TestCase):
 
         self.assertIn("message content", str(caught.exception))
 
+    def test_streaming_completion_skips_non_content_chunks(self):
+        captured: dict[str, object] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["payload"] = json.loads(request.content.decode("utf-8"))
+            body = "\n\n".join(
+                [
+                    'data: {"choices":[{"delta":{"role":"assistant"}}]}',
+                    'data: {"choices":[{"delta":{"content":"schema_"}}]}',
+                    'data: {"choices":[{"delta":{"content":"version"}}]}',
+                    'data: {"choices":[],"usage":{"total_tokens":12}}',
+                    "data: [DONE]",
+                ]
+            )
+            return httpx.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+        client = BailianClient(
+            api_key="test-api-key",
+            base_url="https://bailian.example.test/compatible-mode/v1",
+            model="qwen-plus",
+            transport=httpx.MockTransport(handler),
+        )
+
+        chunks = list(client.chat_completion_stream(messages=[BailianChatMessage(role="user", content="hello")]))
+
+        self.assertEqual(chunks, ["schema_", "version"])
+        self.assertTrue(captured["payload"]["stream"])
+
 
 if __name__ == "__main__":
     unittest.main()

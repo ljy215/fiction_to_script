@@ -1,4 +1,4 @@
-import { apiRequest } from './client'
+import { API_BASE_URL, apiRequest } from './client'
 
 function authHeaders(token) {
   return {
@@ -18,6 +18,55 @@ export function fetchGenerationTask(token, projectId, taskId) {
   return apiRequest(`/projects/${projectId}/generation-tasks/${taskId}`, {
     headers: authHeaders(token)
   })
+}
+
+export async function streamGenerationTask(token, projectId, taskId, onTask) {
+  const response = await fetch(`${API_BASE_URL}/projects/${projectId}/generation-tasks/${taskId}/events`, {
+    headers: authHeaders(token)
+  })
+
+  if (!response.ok || !response.body) {
+    throw new Error('生成事件流连接失败')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  let finalTask = null
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) {
+      break
+    }
+
+    buffer += decoder.decode(value, { stream: true })
+    const events = buffer.split('\n\n')
+    buffer = events.pop() || ''
+
+    for (const rawEvent of events) {
+      const eventLines = rawEvent.split('\n')
+      const eventName = eventLines.find((line) => line.startsWith('event:'))?.slice(6).trim()
+      const dataLine = eventLines.find((line) => line.startsWith('data:'))
+      if (!dataLine) {
+        continue
+      }
+
+      const task = JSON.parse(dataLine.slice(5).trim())
+      if (eventName === 'task' || eventName === 'done') {
+        finalTask = task
+        onTask(task)
+      }
+      if (eventName === 'done') {
+        return task
+      }
+      if (eventName === 'error') {
+        throw new Error(task.detail || '生成事件流失败')
+      }
+    }
+  }
+
+  return finalTask
 }
 
 export function fetchLatestScript(token, projectId) {
