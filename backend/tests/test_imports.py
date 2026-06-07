@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 from docx import Document
 from fastapi.testclient import TestClient
@@ -39,6 +40,49 @@ def build_text_pdf(text: str) -> bytes:
         f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF\n".encode("ascii")
     )
     return bytes(content)
+
+
+def build_epub(chapters: list[tuple[str, str]]) -> bytes:
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr("mimetype", "application/epub+zip")
+        archive.writestr(
+            "META-INF/container.xml",
+            """<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>""",
+        )
+        manifest_items = []
+        spine_items = []
+        for index, (title, body) in enumerate(chapters, start=1):
+            item_id = f"chap{index}"
+            filename = f"chapter{index}.xhtml"
+            manifest_items.append(
+                f'<item id="{item_id}" href="{filename}" media-type="application/xhtml+xml"/>'
+            )
+            spine_items.append(f'<itemref idref="{item_id}"/>')
+            archive.writestr(
+                f"OEBPS/{filename}",
+                f"""<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <body>
+    <h1>{title}</h1>
+    <p>{body}</p>
+  </body>
+</html>""",
+            )
+        archive.writestr(
+            "OEBPS/content.opf",
+            f"""<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <manifest>{''.join(manifest_items)}</manifest>
+  <spine>{''.join(spine_items)}</spine>
+</package>""",
+        )
+    return buffer.getvalue()
 
 
 class ImportApiTest(unittest.TestCase):
@@ -270,6 +314,51 @@ class ImportApiTest(unittest.TestCase):
             f"/projects/{project_id}/imports/pdf",
             headers=headers,
             files={"file": ("blank.pdf", b"%PDF-1.4\n%%EOF\n", "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_import_epub_file_extracts_ordered_chapters(self):
+        headers = self.auth_headers()
+        project_id = self.create_project(headers)
+        epub_bytes = build_epub(
+            [
+                ("第一章 初遇", "林晚在雨夜遇见旧友。"),
+                ("第二章 追问", "旧友说出失踪线索。"),
+                ("第三章 决定", "林晚决定回到故乡。"),
+            ]
+        )
+
+        response = self.client.post(
+            f"/projects/{project_id}/imports/epub",
+            headers=headers,
+            files={"file": ("novel.epub", epub_bytes, "application/epub+zip")},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["source_type"], "epub_file")
+        self.assertEqual(payload["chapter_count"], 3)
+        self.assertTrue(payload["is_generation_ready"])
+
+        chapters_response = self.client.get(
+            f"/projects/{project_id}/imports/{payload['id']}/chapters",
+            headers=headers,
+        )
+        self.assertEqual(chapters_response.status_code, 200)
+        self.assertEqual(
+            [chapter["title"] for chapter in chapters_response.json()],
+            ["第一章 初遇", "第二章 追问", "第三章 决定"],
+        )
+
+    def test_invalid_epub_file_is_rejected(self):
+        headers = self.auth_headers()
+        project_id = self.create_project(headers)
+
+        response = self.client.post(
+            f"/projects/{project_id}/imports/epub",
+            headers=headers,
+            files={"file": ("broken.epub", b"not a zip", "application/epub+zip")},
         )
 
         self.assertEqual(response.status_code, 400)

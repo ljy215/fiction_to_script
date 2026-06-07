@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { createGenerationTask, fetchGenerationTask, fetchLatestScript, updateScript } from '../api/generation'
-import { importDocxFile, importPastedText, importPdfFile, importTxtFile, listChapters } from '../api/imports'
+import { importDocxFile, importEpubFile, importPastedText, importPdfFile, importTxtFile, listChapters } from '../api/imports'
 import { createProject, deleteProject, fetchProject, listProjects } from '../api/projects'
 import { useAuth } from '../stores/auth'
 
@@ -228,7 +228,9 @@ function ProjectsPage() {
           ? await importDocxFile(token, selectedProject.id, importFile)
           : extension === 'pdf'
             ? await importPdfFile(token, selectedProject.id, importFile)
-          : await importTxtFile(token, selectedProject.id, importFile)
+            : extension === 'epub'
+              ? await importEpubFile(token, selectedProject.id, importFile)
+              : await importTxtFile(token, selectedProject.id, importFile)
       await acceptImportedDocument(imported)
       setImportFile(null)
       event.target.reset()
@@ -474,14 +476,14 @@ function ProjectsPage() {
                     上传文件
                     <input
                       required
-                      accept=".txt,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      accept=".txt,.docx,.pdf,.epub,text/plain,application/pdf,application/epub+zip,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                       name="source_file"
                       type="file"
                       onChange={(event) => setImportFile(event.target.files?.[0] || null)}
                     />
                   </label>
                   <button className="button secondary full" type="submit" disabled={importing || !importFile}>
-                    {importing ? '导入中...' : '导入 txt / docx / pdf'}
+                    {importing ? '导入中...' : '导入 txt / docx / pdf / epub'}
                   </button>
                 </form>
               </div>
