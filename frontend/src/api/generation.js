@@ -33,3 +33,11 @@ export function updateScript(token, projectId, scriptId, yamlContent) {
     body: JSON.stringify({ yaml_content: yamlContent })
   })
 }
+
+export function validateScriptYaml(token, projectId, yamlContent) {
+  return apiRequest(`/projects/${projectId}/scripts/validate`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ yaml_content: yamlContent })
+  })
+}

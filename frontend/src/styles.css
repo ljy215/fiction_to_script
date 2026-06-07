@@ -614,6 +614,13 @@ ul {
   border-top: 1px solid #d9deea;
 }
 
+.script-review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  gap: 16px;
+  align-items: start;
+}
+
 .yaml-editor {
   width: 100%;
   min-height: 440px;
@@ -632,6 +639,104 @@ ul {
   outline: 3px solid rgba(31, 111, 235, 0.24);
   outline-offset: 0;
   border-color: #1f6feb;
+}
+
+.yaml-preview-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.yaml-preview-block,
+.validation-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #d9deea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.preview-heading {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.preview-heading h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 1rem;
+}
+
+.preview-heading span {
+  color: #546177;
+  font-size: 0.86rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.yaml-preview-content {
+  max-height: 276px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f6f7fb;
+  color: #17212f;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.86rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.compact-note {
+  margin-top: 0;
+}
+
+.validation-pass,
+.validation-success {
+  color: #1f7a3a;
+}
+
+.validation-fail {
+  color: #b42318;
+}
+
+.validation-success {
+  margin: 0;
+  font-weight: 700;
+}
+
+.validation-errors {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.validation-errors li {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid #f3b4ad;
+  border-radius: 8px;
+  background: #fff7f6;
+}
+
+.validation-errors code {
+  color: #8a1f14;
+  font-size: 0.86rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.validation-errors span {
+  color: #7a2c24;
+  line-height: 1.5;
 }
 
 @media (max-width: 760px) {
@@ -668,6 +773,7 @@ ul {
   .detail-grid,
   .import-grid,
   .workflow-grid,
+  .script-review-grid,
   .chapter-row {
     grid-template-columns: 1fr;
   }
