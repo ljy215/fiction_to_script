@@ -716,6 +716,21 @@ ul {
   line-height: 1.4;
 }
 
+.scene-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.scene-actions .button,
+.line-controls .button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
 .scene-index {
   color: #546177;
   font-size: 0.84rem;

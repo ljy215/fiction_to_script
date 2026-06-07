@@ -17,10 +17,12 @@ from app.schemas import (
     GenerationTaskRead,
     ScriptDocumentRead,
     ScriptDocumentUpdate,
+    ScriptPartialRegenerationCreate,
     ScriptYamlValidationCreate,
     ScriptYamlValidationResult,
 )
 from app.services.chapters import MINIMUM_CHAPTER_COUNT
+from app.services.partial_regeneration import regenerate_script_yaml
 from app.services.script_generation import run_generation_task_with_engine
 from app.services.script_validation import validate_script_yaml
 
@@ -299,6 +301,45 @@ def restore_script_document(
     db.commit()
     db.refresh(restored)
     return restored
+
+
+@router.post("/scripts/{script_id}/regenerate", response_model=ScriptDocumentRead)
+def regenerate_script_document_part(
+    project_id: int,
+    script_id: int,
+    payload: ScriptPartialRegenerationCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    get_owned_project(db, project_id, current_user.id)
+    script = db.execute(
+        select(ScriptDocument).where(
+            ScriptDocument.id == script_id,
+            ScriptDocument.project_id == project_id,
+            ScriptDocument.owner_id == current_user.id,
+        )
+    ).scalar_one_or_none()
+    if script is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Script document not found")
+
+    try:
+        yaml_content = regenerate_script_yaml(script.yaml_content, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    regenerated = ScriptDocument(
+        owner_id=script.owner_id,
+        project_id=script.project_id,
+        source_document_id=script.source_document_id,
+        title=script.title,
+        script_type=script.script_type,
+        yaml_content=yaml_content,
+        version_number=_next_script_version_number(db, project_id, current_user.id),
+    )
+    db.add(regenerated)
+    db.commit()
+    db.refresh(regenerated)
+    return regenerated
 
 
 @router.post("/scripts/validate", response_model=ScriptYamlValidationResult)

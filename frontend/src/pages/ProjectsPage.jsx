@@ -4,6 +4,7 @@ import {
   createGenerationTask,
   fetchLatestScript,
   fetchScriptVersions,
+  regenerateScriptPart,
   restoreScriptVersion,
   streamGenerationTask,
   updateScript,
@@ -179,6 +180,7 @@ function ProjectsPage() {
   const [validationError, setValidationError] = useState('')
   const [validatingYaml, setValidatingYaml] = useState(false)
   const [restoringScriptId, setRestoringScriptId] = useState(null)
+  const [regeneratingTarget, setRegeneratingTarget] = useState('')
   const [error, setError] = useState('')
 
   const selectedScriptTypeLabel = useMemo(() => {
@@ -495,6 +497,34 @@ function ProjectsPage() {
     }
   }
 
+  async function handleRegenerateScriptPart(targetType, sceneId, lineId = null) {
+    if (!selectedProject || !scriptDocument) {
+      return
+    }
+
+    const targetId = lineId || sceneId
+    setRegeneratingTarget(targetId)
+    setError('')
+    try {
+      const regenerated = await regenerateScriptPart(token, selectedProject.id, scriptDocument.id, {
+        target_type: targetType,
+        scene_id: sceneId,
+        line_id: lineId,
+        instruction: targetType === 'scene' ? '补强场景动作、环境和冲突推进' : '重写该行，使表达更具体并忠实当前场景'
+      })
+      const versions = await fetchScriptVersions(token, selectedProject.id)
+      setScriptDocument(regenerated)
+      setScriptVersions(versions)
+      setYamlDraft(regenerated.yaml_content)
+      setValidationResult(null)
+      setValidationError('')
+    } catch (caughtError) {
+      setError(caughtError.message)
+    } finally {
+      setRegeneratingTarget('')
+    }
+  }
+
   function handleScriptLineTextChange(sceneId, lineId, text) {
     const nextView = updateSceneLineText(scriptViewDraft, sceneId, lineId, text)
     setScriptViewDraft(nextView)
@@ -785,6 +815,13 @@ function ProjectsPage() {
                   scriptView={scriptViewDraft}
                   onLineTextChange={handleScriptLineTextChange}
                   onLineCharacterChange={handleScriptLineCharacterChange}
+                  onRegenerateScene={
+                    scriptDocument ? (sceneId) => handleRegenerateScriptPart('scene', sceneId) : null
+                  }
+                  onRegenerateLine={
+                    scriptDocument ? (sceneId, lineId) => handleRegenerateScriptPart('line', sceneId, lineId) : null
+                  }
+                  regeneratingTarget={regeneratingTarget}
                 />
                 <textarea
                   className="yaml-editor"

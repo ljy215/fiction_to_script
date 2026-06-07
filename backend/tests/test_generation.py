@@ -167,6 +167,28 @@ class GenerationApiTest(unittest.TestCase):
         self.assertEqual(restored["version_number"], 3)
         self.assertEqual(restored["yaml_content"], script["yaml_content"])
 
+        line_regeneration_response = self.client.post(
+            f"/projects/{project_id}/scripts/{restored['id']}/regenerate",
+            headers=headers,
+            json={"target_type": "line", "scene_id": "sc_001", "line_id": "line_001", "instruction": "强化雨夜环境"},
+        )
+        self.assertEqual(line_regeneration_response.status_code, 200)
+        line_regenerated = line_regeneration_response.json()
+        self.assertEqual(line_regenerated["version_number"], 4)
+        self.assertIn("强化雨夜环境", line_regenerated["yaml_content"])
+        self.assertTrue(validate_script_yaml(line_regenerated["yaml_content"])["valid"])
+
+        scene_regeneration_response = self.client.post(
+            f"/projects/{project_id}/scripts/{line_regenerated['id']}/regenerate",
+            headers=headers,
+            json={"target_type": "scene", "scene_id": "sc_001", "instruction": "补强场景调度"},
+        )
+        self.assertEqual(scene_regeneration_response.status_code, 200)
+        scene_regenerated = scene_regeneration_response.json()
+        self.assertEqual(scene_regenerated["version_number"], 5)
+        self.assertIn("补强场景调度", scene_regenerated["yaml_content"])
+        self.assertTrue(validate_script_yaml(scene_regenerated["yaml_content"])["valid"])
+
     def test_latest_script_returns_newest_document_after_multiple_generations(self):
         headers = self.auth_headers()
         user_id = self.client.get("/auth/me", headers=headers).json()["id"]

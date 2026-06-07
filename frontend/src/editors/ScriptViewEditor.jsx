@@ -8,7 +8,14 @@ const lineTypeLabels = {
   note: '备注'
 }
 
-function ScriptViewEditor({ scriptView, onLineTextChange, onLineCharacterChange }) {
+function ScriptViewEditor({
+  scriptView,
+  onLineTextChange,
+  onLineCharacterChange,
+  onRegenerateScene,
+  onRegenerateLine,
+  regeneratingTarget
+}) {
   const characters = scriptView.characters || []
   const scenes = scriptView.scenes || []
 
@@ -45,7 +52,17 @@ function ScriptViewEditor({ scriptView, onLineTextChange, onLineCharacterChange 
                 <span className="scene-index">场景 {scene.order || sceneIndex + 1}</span>
                 <h3>{scene.heading || scene.id || `场景 ${sceneIndex + 1}`}</h3>
               </div>
-              <span className="status-pill">{scene.lines?.length || 0} 行</span>
+              <div className="scene-actions">
+                <span className="status-pill">{scene.lines?.length || 0} 行</span>
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => onRegenerateScene(scene.id)}
+                  disabled={!onRegenerateScene || regeneratingTarget === scene.id}
+                >
+                  {regeneratingTarget === scene.id ? '重生成中...' : '重生成场景'}
+                </button>
+              </div>
             </header>
 
             <dl className="scene-meta">
@@ -85,6 +102,14 @@ function ScriptViewEditor({ scriptView, onLineTextChange, onLineCharacterChange 
                           ))}
                         </select>
                       )}
+                      <button
+                        className="button secondary"
+                        type="button"
+                        onClick={() => onRegenerateLine(scene.id, line.id)}
+                        disabled={!onRegenerateLine || regeneratingTarget === line.id}
+                      >
+                        {regeneratingTarget === line.id ? '重生成中...' : '重生成行'}
+                      </button>
                     </div>
                     <textarea
                       aria-label={`${lineTypeLabels[lineType] || lineType}文本`}
