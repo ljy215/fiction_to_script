@@ -161,6 +161,11 @@ Docker 服务地址：
 - `storage/data`：SQLite 数据文件目录。
 - `storage/files`：上传文件和本地文件存储目录。
 
+## 演示视频与格式文档
+
+- [在线观看演示视频](https://raw.githubusercontent.com/ljy215/fiction_to_script/main/docs/assets/demo-video.mp4)
+- [剧本 YAML Schema 说明](./docs/script-yaml-schema.md)
+
 ## 文档入口
 
 - [项目长期记忆与协作规则](./AGENTS.md)
