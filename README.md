@@ -2,7 +2,7 @@
 
 AI 小说转剧本工具是一个 Web 应用，目标是帮助小说作者将 3 个章节以上的多语言小说文本改编成一个完整的中文 YAML 剧本初稿。用户可以导入小说、选择剧本类型、通过 AI 智能体生成剧本、在剧本视图编辑器中继续修改，并最终导出 YAML。
 
-当前仓库处于 MVP 项目骨架阶段，已创建前端 Vite React JavaScript 脚手架和后端 FastAPI 脚手架。具体开发顺序见 [MVP 开发计划](./docs/exec-plans/active/mvp-development-plan.md)。
+具体开发顺序见 [MVP 开发计划](./docs/exec-plans/active/mvp-development-plan.md)。
 
 ## 核心能力
 
@@ -71,41 +71,47 @@ fiction_to_script/
     files/
 ```
 
-当前已完成 PR-001 文档入口、PR-002 前端脚手架、PR-003 后端 FastAPI 脚手架和 PR-004 Docker 一键启动骨架。
+## 使用说明
 
-## 本地启动入口
+### 1. 配置后端环境变量
 
-当前可以启动前端开发服务器：
-
-```bash
-# 前端
-cd frontend
-npm install
-npm run dev
-```
-
-当前可以启动后端开发服务器：
-
-```bash
-# 后端，uv 方式
-cd backend
-uv sync
-uv run fastapi dev app/main.py
-```
-
-后端默认读取 [backend/.env.example](./backend/.env.example)。本地开发如需真实阿里百炼 API Key 或 JWT 密钥，复制为 `backend/.env` 后修改：
+后端默认读取 [backend/.env.example](./backend/.env.example)，本地使用前建议复制为 `backend/.env`：
 
 ```bash
 cd backend
 copy .env.example .env
 ```
 
+必须确认或修改的配置：
+
+- `BAILIAN_API_KEY`：阿里百炼 API Key。真实 AI 生成和局部重生成必须配置真实 Key；不要提交到 Git。
+- `BAILIAN_BASE_URL`：阿里百炼兼容模式地址，默认 `https://dashscope.aliyuncs.com/compatible-mode/v1`。
+- `BAILIAN_MODEL`：百炼模型名称，例如 `qwen-plus` 或当前可用模型。
+- `JWT_SECRET`：登录鉴权密钥，本地可以使用开发值，部署时必须改成强随机字符串。
+- `DATABASE_URL`：SQLite 数据库路径，默认 `sqlite:///./storage/data/app.sqlite3`。
+- `FILE_STORAGE_DIR`：上传文件保存目录，默认 `./storage/files`。
+- `CORS_ORIGINS`：允许访问后端的前端地址，默认包含 `http://localhost:5173` 和 `http://127.0.0.1:5173`。
+
+前端默认请求 `http://127.0.0.1:8000`。如需修改后端地址，可在前端环境变量中设置 `VITE_API_BASE_URL`。
+
+### 2. 启动后端
+
+uv 方式：
+
 ```bash
-# 后端，pip 兜底方式
+cd backend
+uv sync
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+pip 兜底方式：
+
+```bash
 cd backend
 python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
-fastapi dev app/main.py
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 健康检查：
@@ -114,14 +120,37 @@ fastapi dev app/main.py
 curl http://127.0.0.1:8000/health
 ```
 
-Docker 一键启动：
+### 3. 启动前端
 
 ```bash
-# Docker 一键启动
+cd frontend
+npm install
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+打开前端：
+
+- http://127.0.0.1:5173
+
+### 4. 基本使用流程
+
+- 注册账号并登录。
+- 创建项目，选择剧本类型。
+- 粘贴文本或上传 `.txt`、`.docx`、`.pdf`、`.epub` 小说。
+- 确认章节识别结果，至少需要 3 章。
+- 点击生成中文 YAML 剧本。
+- 在剧本视图中编辑行内容，点击“应用”后同步到 YAML。
+- 点击“重生成行”或“重生成场景”后，由百炼 AI 局部重写对应内容，并保存为新版本。
+- 使用历史版本列表恢复旧版本。
+- 校验通过后导出 YAML。
+
+### 5. Docker 一键启动
+
+```bash
 docker compose up
 ```
 
-Docker 服务：
+Docker 服务地址：
 
 - 前端：http://127.0.0.1:5173
 - 后端：http://127.0.0.1:8000
