@@ -466,6 +466,8 @@ backend/
 
 ### PR-022：LangGraph 通用节点骨架
 
+状态：已完成
+
 标题：添加 LangGraph 通用节点骨架
 
 范围：
