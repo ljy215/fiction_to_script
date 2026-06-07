@@ -367,6 +367,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "python-docx" },
+    { name = "pyyaml" },
     { name = "sqlalchemy" },
 ]
 
@@ -378,6 +379,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.12.0,<3.0.0" },
     { name = "pyjwt", specifier = ">=2.10.1,<3.0.0" },
     { name = "python-docx", specifier = ">=1.1.2,<2.0.0" },
+    { name = "pyyaml", specifier = ">=6.0.0,<7.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.45,<3.0.0" },
 ]
 

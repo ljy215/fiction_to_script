@@ -8,9 +8,17 @@ from app.api.projects import get_owned_project
 from app.auth.dependencies import get_current_user
 from app.db import get_db
 from app.models import Chapter, GenerationTask, ScriptDocument, SourceDocument, User
-from app.schemas import GenerationTaskCreate, GenerationTaskRead, ScriptDocumentRead, ScriptDocumentUpdate
+from app.schemas import (
+    GenerationTaskCreate,
+    GenerationTaskRead,
+    ScriptDocumentRead,
+    ScriptDocumentUpdate,
+    ScriptYamlValidationCreate,
+    ScriptYamlValidationResult,
+)
 from app.services.chapters import MINIMUM_CHAPTER_COUNT
 from app.services.script_generation import run_generation_task
+from app.services.script_validation import validate_script_yaml
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["generation"])
 
@@ -132,3 +140,14 @@ def update_script_document(
     db.commit()
     db.refresh(script)
     return script
+
+
+@router.post("/scripts/validate", response_model=ScriptYamlValidationResult)
+def validate_script_document_yaml(
+    project_id: int,
+    payload: ScriptYamlValidationCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    get_owned_project(db, project_id, current_user.id)
+    return validate_script_yaml(payload.yaml_content)
