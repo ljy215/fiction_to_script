@@ -96,6 +96,14 @@ export function restoreScriptVersion(token, projectId, scriptId) {
   })
 }
 
+export function regenerateScriptPart(token, projectId, scriptId, payload) {
+  return apiRequest(`/projects/${projectId}/scripts/${scriptId}/regenerate`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  })
+}
+
 export function validateScriptYaml(token, projectId, yamlContent) {
   return apiRequest(`/projects/${projectId}/scripts/validate`, {
     method: 'POST',

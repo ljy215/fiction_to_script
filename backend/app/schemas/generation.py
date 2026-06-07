@@ -29,6 +29,13 @@ class ScriptDocumentUpdate(BaseModel):
     yaml_content: str = Field(min_length=1)
 
 
+class ScriptPartialRegenerationCreate(BaseModel):
+    target_type: str = Field(pattern="^(scene|line)$")
+    scene_id: str = Field(min_length=1)
+    line_id: str | None = None
+    instruction: str | None = Field(default=None, max_length=1000)
+
+
 class ScriptYamlValidationCreate(BaseModel):
     yaml_content: str = Field(min_length=1)
 
