@@ -212,30 +212,93 @@ def _is_mock_configured() -> bool:
     return is_mock_bailian_api_key(settings.bailian_api_key)
 
 
-def _build_prompt(project: Project, chapters: list[Chapter], script_type: str | None) -> str:
-    chapter_context = "\n\n".join(
-        f"{chapter.title}\n{chapter.content_text[:2000]}" for chapter in chapters[:8]
-    )
+def _clean_model_yaml(content: str) -> str:
+    text = content.strip()
+    if not text.startswith("```"):
+        return text
+
+    lines = text.splitlines()
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _build_ai_generation_context(project: Project, source: SourceDocument, state: GenerationGraphState) -> dict[str, object]:
+    return {
+        "project": {
+            "id": project.id,
+            "name": project.name,
+            "novel_title": project.novel_title,
+            "original_author": project.original_author,
+            "script_type": state.script_type or project.script_type or "film",
+            "script_type_label": SCRIPT_TYPE_LABELS.get(state.script_type or project.script_type or "film", "影视剧本"),
+        },
+        "source": {
+            "id": source.id,
+            "source_language": state.source_language,
+            "output_language": state.output_language,
+        },
+        "chapters": state.chapter_summaries,
+        "events": state.events,
+        "characters": state.characters,
+        "locations": state.locations,
+        "adaptation": state.adaptation,
+        "scene_draft": state.scenes,
+    }
+
+
+def _build_prompt(project: Project, source: SourceDocument, state: GenerationGraphState) -> str:
+    context = _build_ai_generation_context(project, source, state)
     return (
-        "请把下面小说章节改编成一个完整中文 YAML 剧本。"
-        "必须遵守项目 docs/script-yaml-schema.md 的顶层结构，输出只能是 YAML，不要解释。\n"
-        f"剧本类型：{SCRIPT_TYPE_LABELS.get(script_type or project.script_type or 'film', '影视剧本')}\n"
-        f"小说名：{project.novel_title or project.name}\n"
-        f"原作者：{project.original_author or '未知'}\n\n"
-        f"小说章节：\n{chapter_context}"
+        "请基于下面的结构化小说分析结果，真实创作一个完整中文 YAML 剧本初稿。\n"
+        "必须严格遵守 docs/script-yaml-schema.md 的顶层结构和字段含义。\n"
+        "输出只能是 YAML 正文，不要使用 Markdown 代码块，不要解释。\n"
+        "必须包含 schema_version、document、source、script_config、generation、characters、locations、events、adaptation、script.scenes。\n"
+        "必须使用提供的稳定 ID，场景 source_refs 必须引用已有 chapter_id 和 event_id。\n"
+        "剧本正文必须是中文，并尽量忠实原文章节事件。\n\n"
+        f"结构化上下文：\n{json.dumps(context, ensure_ascii=False, indent=2)}"
     )
 
 
-def _call_bailian(project: Project, chapters: list[Chapter], script_type: str | None) -> str:
+def _call_bailian(project: Project, source: SourceDocument, state: GenerationGraphState) -> str:
     settings = get_settings()
-    prompt = _build_prompt(project, chapters, script_type)
-    return BailianClient.from_settings(settings).chat_completion(
+    prompt = _build_prompt(project, source, state)
+    content = BailianClient.from_settings(settings).chat_completion(
         messages=[
             BailianChatMessage(role="system", content="你是专业中文编剧，只输出 YAML。"),
             BailianChatMessage(role="user", content=prompt),
         ],
         temperature=0.4,
     )
+    return _clean_model_yaml(content)
+
+
+def _call_bailian_yaml_repair(
+    project: Project,
+    source: SourceDocument,
+    state: GenerationGraphState,
+    invalid_yaml: str,
+    validation_errors: list[str],
+) -> str:
+    context = _build_ai_generation_context(project, source, state)
+    prompt = (
+        "下面是一份未通过校验的 YAML 剧本。请根据校验错误修复它。\n"
+        "只能输出修复后的 YAML 正文，不要解释，不要使用 Markdown 代码块。\n"
+        "不得删除必填结构，不得改变已有稳定 ID，所有引用必须存在。\n\n"
+        f"校验错误：\n{json.dumps(validation_errors, ensure_ascii=False, indent=2)}\n\n"
+        f"结构化上下文：\n{json.dumps(context, ensure_ascii=False, indent=2)}\n\n"
+        f"待修复 YAML：\n{invalid_yaml}"
+    )
+    content = BailianClient.from_settings().chat_completion(
+        messages=[
+            BailianChatMessage(role="system", content="你是专业 YAML 剧本修复器，只输出修复后的 YAML。"),
+            BailianChatMessage(role="user", content=prompt),
+        ],
+        temperature=0.1,
+    )
+    return _clean_model_yaml(content)
 
 
 def _build_complete_yaml(
@@ -522,7 +585,7 @@ def run_generation_task(db: Session, task_id: int) -> None:
         yaml_content = (
             _build_complete_yaml(project, source, state, provider, task.model)
             if provider == "mock"
-            else _call_bailian(project, chapters, project.script_type)
+            else _call_bailian(project, source, state)
         )
         task.current_node = "yaml_builder"
         state = yaml_builder_node(state, project, yaml_content)
@@ -532,7 +595,11 @@ def run_generation_task(db: Session, task_id: int) -> None:
         state = schema_validator_node(state)
         if state.errors:
             task.current_node = "yaml_repair"
-            repaired_yaml = _build_complete_yaml(project, source, state, "mock", "mock-yaml-repair")
+            repaired_yaml = (
+                _build_complete_yaml(project, source, state, "mock", "mock-yaml-repair")
+                if provider == "mock"
+                else _call_bailian_yaml_repair(project, source, state, yaml_content, state.errors)
+            )
             state = yaml_repair_node(state, repaired_yaml)
             task.graph_state = state.model_dump_json(ensure_ascii=False)
 

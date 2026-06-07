@@ -1,0 +1,7 @@
+.playwright-mcp/
+backend/.env
+backend/storage/
+frontend/dist/
+frontend/node_modules/
+__pycache__/
+*.py[cod]
