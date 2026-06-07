@@ -5,7 +5,7 @@ import { importDocxFile, importEpubFile, importPastedText, importPdfFile, import
 import { createProject, deleteProject, fetchProject, listProjects } from '../api/projects'
 import YamlPreview from '../components/YamlPreview'
 import ScriptViewEditor from '../editors/ScriptViewEditor'
-import { parseScriptView, updateSceneLineCharacter, updateSceneLineText } from '../editors/scriptView'
+import { parseScriptView, serializeScriptViewToYaml, updateSceneLineCharacter, updateSceneLineText } from '../editors/scriptView'
 import { useAuth } from '../stores/auth'
 
 const scriptTypes = [
@@ -409,11 +409,19 @@ function ProjectsPage() {
 
     setSavingScript(true)
     setError('')
+    setValidationError('')
     try {
+      const validation = await validateScriptYaml(token, selectedProject.id, yamlDraft)
+      setValidationResult(validation)
+      if (!validation.valid) {
+        setError('当前 YAML 未通过校验，修正后才能保存。')
+        return
+      }
+
       const updated = await updateScript(token, selectedProject.id, scriptDocument.id, yamlDraft)
       setScriptDocument(updated)
       setYamlDraft(updated.yaml_content)
-      setValidationResult(null)
+      setValidationResult(validation)
       setValidationError('')
     } catch (caughtError) {
       setError(caughtError.message)
@@ -447,11 +455,19 @@ function ProjectsPage() {
   }
 
   function handleScriptLineTextChange(sceneId, lineId, text) {
-    setScriptViewDraft((current) => updateSceneLineText(current, sceneId, lineId, text))
+    const nextView = updateSceneLineText(scriptViewDraft, sceneId, lineId, text)
+    setScriptViewDraft(nextView)
+    setYamlDraft((currentYaml) => serializeScriptViewToYaml(currentYaml, nextView))
+    setValidationResult(null)
+    setValidationError('')
   }
 
   function handleScriptLineCharacterChange(sceneId, lineId, characterId) {
-    setScriptViewDraft((current) => updateSceneLineCharacter(current, sceneId, lineId, characterId))
+    const nextView = updateSceneLineCharacter(scriptViewDraft, sceneId, lineId, characterId)
+    setScriptViewDraft(nextView)
+    setYamlDraft((currentYaml) => serializeScriptViewToYaml(currentYaml, nextView))
+    setValidationResult(null)
+    setValidationError('')
   }
 
   return (
