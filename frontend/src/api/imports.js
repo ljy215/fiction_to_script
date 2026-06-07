@@ -36,6 +36,17 @@ export function importDocxFile(token, projectId, file) {
   })
 }
 
+export function importPdfFile(token, projectId, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  return apiRequest(`/projects/${projectId}/imports/pdf`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: formData
+  })
+}
+
 export function listChapters(token, projectId, sourceDocumentId) {
   return apiRequest(`/projects/${projectId}/imports/${sourceDocumentId}/chapters`, {
     headers: authHeaders(token)

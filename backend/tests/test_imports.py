@@ -13,6 +13,34 @@ from app.main import app
 from app.storage import LocalFileStorage, get_file_storage
 
 
+def build_text_pdf(text: str) -> bytes:
+    escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    stream = f"BT /F1 12 Tf 72 720 Td ({escaped}) Tj ET".encode("latin-1")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream",
+    ]
+    content = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(content))
+        content.extend(f"{index} 0 obj\n".encode("ascii"))
+        content.extend(obj)
+        content.extend(b"\nendobj\n")
+    xref_start = len(content)
+    content.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    content.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        content.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    content.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF\n".encode("ascii")
+    )
+    return bytes(content)
+
+
 class ImportApiTest(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -213,6 +241,35 @@ class ImportApiTest(unittest.TestCase):
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 )
             },
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_import_pdf_file_extracts_text(self):
+        headers = self.auth_headers()
+        project_id = self.create_project(headers)
+        pdf_bytes = build_text_pdf("Chapter 1 Arrival")
+
+        response = self.client.post(
+            f"/projects/{project_id}/imports/pdf",
+            headers=headers,
+            files={"file": ("novel.pdf", pdf_bytes, "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["source_type"], "pdf_file")
+        self.assertEqual(payload["original_filename"], "novel.pdf")
+        self.assertIn("Chapter 1 Arrival", payload["content_text"])
+
+    def test_empty_pdf_file_is_rejected(self):
+        headers = self.auth_headers()
+        project_id = self.create_project(headers)
+
+        response = self.client.post(
+            f"/projects/{project_id}/imports/pdf",
+            headers=headers,
+            files={"file": ("blank.pdf", b"%PDF-1.4\n%%EOF\n", "application/pdf")},
         )
 
         self.assertEqual(response.status_code, 400)

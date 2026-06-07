@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 from typing import Annotated
 
 from docx import Document
@@ -91,6 +92,42 @@ def _extract_docx_text(path: Path) -> str:
             if cells:
                 parts.append(" | ".join(cells))
 
+    return _clean_text("\n".join(parts))
+
+
+_PDF_LITERAL_TEXT_RE = re.compile(rb"\((?:\\.|[^\\()])*\)\s*Tj")
+
+
+def _decode_pdf_literal(raw: bytes) -> str:
+    inner = raw[1 : raw.rfind(b")")]
+    text = inner.decode("latin-1", errors="ignore")
+    replacements = {
+        r"\\": "\\",
+        r"\(": "(",
+        r"\)": ")",
+        r"\n": "\n",
+        r"\r": "\n",
+        r"\t": "\t",
+    }
+    for source, target in replacements.items():
+        text = text.replace(source, target)
+    return text
+
+
+def _extract_pdf_text(path: Path) -> str:
+    content = path.read_bytes()
+    parts: list[str] = []
+    for match in _PDF_LITERAL_TEXT_RE.finditer(content):
+        literal = match.group(0).rsplit(b")", 1)[0] + b")"
+        text = _decode_pdf_literal(literal).strip()
+        if text:
+            parts.append(text)
+
+    if not parts:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="PDF text cannot be extracted. Scanned PDFs are not supported in the MVP.",
+        )
     return _clean_text("\n".join(parts))
 
 
@@ -208,6 +245,38 @@ def import_docx_file(
         project_id=project_id,
         stored_file_id=stored_file.id,
         source_type="docx_file",
+        original_filename=stored_file.original_filename,
+        text=text,
+    )
+
+
+@router.post("/pdf", response_model=SourceDocumentRead, status_code=status.HTTP_201_CREATED)
+def import_pdf_file(
+    project_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    storage: Annotated[LocalFileStorage, Depends(get_file_storage)],
+    file: UploadFile = File(...),
+):
+    get_owned_project(db, project_id, current_user.id)
+
+    filename = _require_extension(file.filename or "", ".pdf")
+    stored_file, stored_path = _save_uploaded_file(
+        db=db,
+        storage=storage,
+        file=file,
+        owner_id=current_user.id,
+        project_id=project_id,
+        filename=filename,
+    )
+
+    text = _extract_pdf_text(stored_path)
+    return _create_source_document(
+        db=db,
+        owner_id=current_user.id,
+        project_id=project_id,
+        stored_file_id=stored_file.id,
+        source_type="pdf_file",
         original_filename=stored_file.original_filename,
         text=text,
     )

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { createGenerationTask, fetchGenerationTask, fetchLatestScript, updateScript } from '../api/generation'
-import { importDocxFile, importPastedText, importTxtFile, listChapters } from '../api/imports'
+import { importDocxFile, importPastedText, importPdfFile, importTxtFile, listChapters } from '../api/imports'
 import { createProject, deleteProject, fetchProject, listProjects } from '../api/projects'
 import { useAuth } from '../stores/auth'
 
@@ -226,6 +226,8 @@ function ProjectsPage() {
       const imported =
         extension === 'docx'
           ? await importDocxFile(token, selectedProject.id, importFile)
+          : extension === 'pdf'
+            ? await importPdfFile(token, selectedProject.id, importFile)
           : await importTxtFile(token, selectedProject.id, importFile)
       await acceptImportedDocument(imported)
       setImportFile(null)
@@ -472,14 +474,14 @@ function ProjectsPage() {
                     上传文件
                     <input
                       required
-                      accept=".txt,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      accept=".txt,.docx,.pdf,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                       name="source_file"
                       type="file"
                       onChange={(event) => setImportFile(event.target.files?.[0] || null)}
                     />
                   </label>
                   <button className="button secondary full" type="submit" disabled={importing || !importFile}>
-                    {importing ? '导入中...' : '导入 txt / docx'}
+                    {importing ? '导入中...' : '导入 txt / docx / pdf'}
                   </button>
                 </form>
               </div>
