@@ -103,6 +103,76 @@ def character_location_extractor_node(state: GenerationGraphState) -> Generation
     return state
 
 
+def adaptation_planner_node(state: GenerationGraphState, project: Project) -> GenerationGraphState:
+    state.start_node("adaptation_planner")
+    title = project.novel_title or project.name
+    preserved_events = [event["id"] for event in state.events]
+    state.adaptation = {
+        "logline": f"{title}的主人公在连续事件中面对核心冲突，并做出关键选择。",
+        "theme": "选择、真相与成长",
+        "strategy": {
+            "preserved_events": preserved_events,
+            "merged_events": [],
+            "omitted_events": [],
+            "added_bridges": ["为连接章节事件补充少量过渡动作。"],
+        },
+        "notes": ["整体改编以忠实原文事件顺序为优先。"],
+    }
+    state.finish_node("adaptation_planner")
+    return state
+
+
+def script_writer_node(state: GenerationGraphState) -> GenerationGraphState:
+    state.start_node("script_writer")
+    character = state.characters[0] if state.characters else {"id": "char_001", "name": "主人公"}
+    location = state.locations[0] if state.locations else {"id": "loc_001", "name": "主要场景"}
+    scenes = []
+    line_order = 1
+    for event in state.events:
+        scene_order = event["order"]
+        scene_id = f"sc_{scene_order:03d}"
+        action_line_id = f"line_{line_order:03d}"
+        dialogue_line_id = f"line_{line_order + 1:03d}"
+        line_order += 2
+        scenes.append(
+            {
+                "id": scene_id,
+                "order": scene_order,
+                "heading": f"内景 {location['name']} 夜",
+                "location_id": location["id"],
+                "interior_exterior": "interior",
+                "time_of_day": "night",
+                "purpose": "呈现原文核心事件并推动人物选择。",
+                "conflict": event["summary"],
+                "outcome": event["consequence"],
+                "source_refs": [
+                    {
+                        "chapter_id": event["chapter_id"],
+                        "event_id": event["id"],
+                    }
+                ],
+                "lines": [
+                    {
+                        "id": action_line_id,
+                        "type": "action",
+                        "text": f"{character['name']}进入{location['name']}，事件的压力逐渐显现。",
+                    },
+                    {
+                        "id": dialogue_line_id,
+                        "type": "dialogue",
+                        "character_id": character["id"],
+                        "speaker": character["name"],
+                        "text": "这件事不能就这样结束。",
+                        "emotion": "坚定",
+                    },
+                ],
+            }
+        )
+    state.scenes = scenes
+    state.finish_node("script_writer")
+    return state
+
+
 def yaml_builder_node(
     state: GenerationGraphState,
     project: Project,
@@ -112,6 +182,14 @@ def yaml_builder_node(
     state.script_type = project.script_type
     state.yaml_content = yaml_content
     state.finish_node("yaml_builder")
+    return state
+
+
+def yaml_repair_node(state: GenerationGraphState, repaired_yaml: str) -> GenerationGraphState:
+    state.start_node("yaml_repair")
+    state.clear_errors()
+    state.yaml_content = repaired_yaml
+    state.finish_node("yaml_repair")
     return state
 
 

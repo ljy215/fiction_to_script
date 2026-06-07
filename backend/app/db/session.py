@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -34,7 +34,34 @@ def init_db() -> None:
     import app.models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    migrate_sqlite_schema(engine)
     check_db_connection()
+
+
+def migrate_sqlite_schema(db_engine: Engine) -> None:
+    if db_engine.dialect.name != "sqlite":
+        return
+
+    inspector = inspect(db_engine)
+    if "generation_tasks" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("generation_tasks")}
+    migrations = []
+    if "current_node" not in columns:
+        migrations.append(
+            "ALTER TABLE generation_tasks "
+            "ADD COLUMN current_node VARCHAR(80) NOT NULL DEFAULT 'queued'"
+        )
+    if "graph_state" not in columns:
+        migrations.append("ALTER TABLE generation_tasks ADD COLUMN graph_state TEXT")
+
+    if not migrations:
+        return
+
+    with db_engine.begin() as connection:
+        for migration in migrations:
+            connection.execute(text(migration))
 
 
 def check_db_connection() -> bool:
