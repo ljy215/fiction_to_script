@@ -171,27 +171,41 @@ class GenerationApiTest(unittest.TestCase):
         self.assertEqual(restored["version_number"], 3)
         self.assertEqual(restored["yaml_content"], script["yaml_content"])
 
-        line_regeneration_response = self.client.post(
-            f"/projects/{project_id}/scripts/{restored['id']}/regenerate",
-            headers=headers,
-            json={"target_type": "line", "scene_id": "sc_001", "line_id": "line_001", "instruction": "强化雨夜环境"},
-        )
+        fake_client = Mock()
+        fake_client.chat_completion.side_effect = [
+            '{"text":"AI 强化后的雨夜动作。","speaker":"主人公","character_id":"char_001"}',
+            (
+                '{"purpose":"AI 补强后的场景目的","conflict":"AI 补强后的场景冲突",'
+                '"outcome":"AI 补强后的场景结果","lines":['
+                '{"id":"line_001","text":"AI 场景动作。","speaker":"主人公","character_id":"char_001"},'
+                '{"id":"line_002","text":"AI 场景对白。","speaker":"主人公","character_id":"char_001"}'
+                ']}'
+            ),
+        ]
+        with patch("app.services.partial_regeneration.BailianClient.from_settings", return_value=fake_client):
+            line_regeneration_response = self.client.post(
+                f"/projects/{project_id}/scripts/{restored['id']}/regenerate",
+                headers=headers,
+                json={"target_type": "line", "scene_id": "sc_001", "line_id": "line_001", "instruction": "强化雨夜环境"},
+            )
+            scene_regeneration_response = self.client.post(
+                f"/projects/{project_id}/scripts/{line_regeneration_response.json()['id']}/regenerate",
+                headers=headers,
+                json={"target_type": "scene", "scene_id": "sc_001", "instruction": "补强场景调度"},
+            )
         self.assertEqual(line_regeneration_response.status_code, 200)
         line_regenerated = line_regeneration_response.json()
         self.assertEqual(line_regenerated["version_number"], 4)
-        self.assertIn("强化雨夜环境", line_regenerated["yaml_content"])
+        self.assertIn("AI 强化后的雨夜动作。", line_regenerated["yaml_content"])
         self.assertTrue(validate_script_yaml(line_regenerated["yaml_content"])["valid"])
 
-        scene_regeneration_response = self.client.post(
-            f"/projects/{project_id}/scripts/{line_regenerated['id']}/regenerate",
-            headers=headers,
-            json={"target_type": "scene", "scene_id": "sc_001", "instruction": "补强场景调度"},
-        )
         self.assertEqual(scene_regeneration_response.status_code, 200)
         scene_regenerated = scene_regeneration_response.json()
         self.assertEqual(scene_regenerated["version_number"], 5)
-        self.assertIn("补强场景调度", scene_regenerated["yaml_content"])
+        self.assertIn("AI 补强后的场景目的", scene_regenerated["yaml_content"])
+        self.assertIn("AI 场景对白。", scene_regenerated["yaml_content"])
         self.assertTrue(validate_script_yaml(scene_regenerated["yaml_content"])["valid"])
+        self.assertEqual(fake_client.chat_completion.call_count, 2)
 
     def test_latest_script_returns_newest_document_after_multiple_generations(self):
         headers = self.auth_headers()
@@ -336,19 +350,17 @@ class GenerationApiTest(unittest.TestCase):
     def test_partial_regeneration_uses_ai_when_bailian_is_configured(self):
         fake_client = Mock()
         fake_client.chat_completion.return_value = '{"text":"AI 改写后的动作细节。","speaker":"Hero","character_id":"char_001"}'
-        fake_settings = type("SettingsStub", (), {"bailian_api_key": "real-bailian-key"})()
 
-        with patch("app.services.partial_regeneration.get_settings", return_value=fake_settings):
-            with patch("app.services.partial_regeneration.BailianClient.from_settings", return_value=fake_client):
-                regenerated = regenerate_script_yaml(
-                    VALID_YAML,
-                    ScriptPartialRegenerationCreate(
-                        target_type="line",
-                        scene_id="sc_001",
-                        line_id="line_001",
-                        instruction="用 AI 改写动作行",
-                    ),
-                )
+        with patch("app.services.partial_regeneration.BailianClient.from_settings", return_value=fake_client):
+            regenerated = regenerate_script_yaml(
+                VALID_YAML,
+                ScriptPartialRegenerationCreate(
+                    target_type="line",
+                    scene_id="sc_001",
+                    line_id="line_001",
+                    instruction="用 AI 改写动作行",
+                ),
+            )
 
         self.assertIn("AI 改写后的动作细节。", regenerated)
         self.assertTrue(validate_script_yaml(regenerated)["valid"])

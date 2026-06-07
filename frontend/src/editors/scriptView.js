@@ -350,11 +350,11 @@ function findLineBlock(lines, sceneStart, sceneEnd, lineId) {
       }
       const line = parseLine(lines, index, end)
       if (line.id === lineId) {
-        return [index, end]
+        return [index, end, lineIndent + 2]
       }
     }
   }
-  return [-1, -1]
+  return [-1, -1, -1]
 }
 
 function upsertScalar(lines, blockStart, blockEnd, indent, key, value) {
@@ -380,20 +380,20 @@ export function serializeScriptViewToYaml(yamlContent, scriptView) {
 
     let currentSceneEnd = sceneEnd
     for (const scriptLine of scene.lines || []) {
-      const [lineStart, lineEnd] = findLineBlock(lines, sceneStart, currentSceneEnd, scriptLine.id)
+      const [lineStart, lineEnd, linePropertyIndent] = findLineBlock(lines, sceneStart, currentSceneEnd, scriptLine.id)
       if (lineStart < 0) {
         continue
       }
 
-      let currentLineEnd = upsertScalar(lines, lineStart, lineEnd, 10, 'text', scriptLine.text || '')
+      let currentLineEnd = upsertScalar(lines, lineStart, lineEnd, linePropertyIndent, 'text', scriptLine.text || '')
       currentSceneEnd += currentLineEnd - lineEnd
 
       if ((scriptLine.type || 'action') === 'dialogue') {
         const beforeCharacterEnd = currentLineEnd
-        currentLineEnd = upsertScalar(lines, lineStart, currentLineEnd, 10, 'character_id', scriptLine.character_id || '')
+        currentLineEnd = upsertScalar(lines, lineStart, currentLineEnd, linePropertyIndent, 'character_id', scriptLine.character_id || '')
         currentSceneEnd += currentLineEnd - beforeCharacterEnd
         const beforeSpeakerEnd = currentLineEnd
-        currentLineEnd = upsertScalar(lines, lineStart, currentLineEnd, 10, 'speaker', scriptLine.speaker || '')
+        currentLineEnd = upsertScalar(lines, lineStart, currentLineEnd, linePropertyIndent, 'speaker', scriptLine.speaker || '')
         currentSceneEnd += currentLineEnd - beforeSpeakerEnd
       }
     }

@@ -4,33 +4,14 @@ import re
 
 import yaml
 
-from app.config import get_settings
 from app.schemas import ScriptPartialRegenerationCreate
-from app.services.bailian_client import BailianChatMessage, BailianClient, is_mock_bailian_api_key
+from app.services.bailian_client import BailianChatMessage, BailianClient
 from app.services.script_validation import validate_script_yaml
 
 
 def _target_instruction(instruction: str | None) -> str:
     cleaned = (instruction or "").strip()
     return cleaned or "保持原文事件和人物意图，补强动作、环境和情绪表达。"
-
-
-def _rewrite_line_text(line: dict[str, object], scene: dict[str, object], instruction: str) -> str:
-    original = str(line.get("text") or "").strip()
-    line_type = str(line.get("type") or "action")
-    heading = str(scene.get("heading") or "当前场景")
-    purpose = str(scene.get("purpose") or "推动场景目标")
-
-    if line_type == "dialogue":
-        speaker = str(line.get("speaker") or "角色")
-        return f"{speaker}压住情绪，把话说得更明确：“{original or purpose}”"
-    if line_type == "sound":
-        return f"{heading}的声音层次被重新整理：{original or '环境声逐渐压近'}，并服务于{purpose}。"
-    if line_type == "narration":
-        return f"旁白重新聚焦：{original or purpose}。{instruction}"
-    if line_type == "transition":
-        return original or "切至："
-    return f"{heading}中，{original or purpose}。{instruction}"
 
 
 def _clean_json_content(content: str) -> str:
@@ -178,35 +159,6 @@ def _regenerate_scene_with_ai(
     return _call_bailian_for_patch(prompt)
 
 
-def _regenerate_with_mock_rules(
-    document: dict[str, object],
-    scene: dict[str, object],
-    lines: list[dict[str, object]],
-    payload: ScriptPartialRegenerationCreate,
-    instruction: str,
-) -> None:
-    if payload.target_type == "line":
-        if not payload.line_id:
-            raise ValueError("line_id is required for line regeneration")
-        for line in lines:
-            if isinstance(line, dict) and line.get("id") == payload.line_id:
-                line["text"] = _rewrite_line_text(line, scene, instruction)
-                if "content" in line:
-                    line["content"] = line["text"]
-                _append_regeneration_note(document, payload.line_id, instruction)
-                break
-        else:
-            raise ValueError(f"Line not found: {payload.line_id}")
-    else:
-        for line in lines:
-            if isinstance(line, dict):
-                line["text"] = _rewrite_line_text(line, scene, instruction)
-                if "content" in line:
-                    line["content"] = line["text"]
-        scene["purpose"] = f"{scene.get('purpose') or '呈现原文事件'}；局部重生成后强化：{instruction}"
-        _append_regeneration_note(document, payload.scene_id, instruction)
-
-
 def _regenerate_with_ai(
     document: dict[str, object],
     scene: dict[str, object],
@@ -271,11 +223,7 @@ def regenerate_script_yaml(yaml_content: str, payload: ScriptPartialRegeneration
     if not isinstance(lines, list):
         raise ValueError(f"Scene has no editable lines: {payload.scene_id}")
 
-    settings = get_settings()
-    if is_mock_bailian_api_key(settings.bailian_api_key):
-        _regenerate_with_mock_rules(document, scene, lines, payload, instruction)
-    else:
-        _regenerate_with_ai(document, scene, lines, payload, instruction)
+    _regenerate_with_ai(document, scene, lines, payload, instruction)
 
     document_payload = document.setdefault("document", {})
     if isinstance(document_payload, dict):
