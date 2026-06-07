@@ -508,10 +508,13 @@ function ProjectsPage() {
                   </p>
                   <div className="chapter-list">
                     {chapters.map((chapter) => (
-                      <article className="chapter-row" key={chapter.id}>
-                        <strong>{chapter.order}. {chapter.title}</strong>
-                        <span>{chapter.content_length} 字符</span>
-                      </article>
+                      <details className="chapter-row" key={chapter.id}>
+                        <summary>
+                          <strong>{chapter.order}. {chapter.title}</strong>
+                          <span>{chapter.content_length} 字符</span>
+                        </summary>
+                        <p>{chapter.content_text}</p>
+                      </details>
                     ))}
                   </div>
                 </>

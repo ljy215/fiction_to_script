@@ -558,14 +558,18 @@ ul {
 }
 
 .chapter-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
   padding: 10px 12px;
   border: 1px solid #d9deea;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.chapter-row summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
 }
 
 .chapter-row strong {
@@ -577,6 +581,15 @@ ul {
   color: #546177;
   font-size: 0.9rem;
   white-space: nowrap;
+}
+
+.chapter-row p {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #e6ebf3;
+  color: #405169;
+  line-height: 1.7;
+  white-space: pre-wrap;
 }
 
 .progress-track {
