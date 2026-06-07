@@ -4,6 +4,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+from app.services.chapters import MINIMUM_CHAPTER_COUNT
 
 
 class SourceDocument(Base):
@@ -25,3 +26,16 @@ class SourceDocument(Base):
     owner = relationship("User", back_populates="source_documents")
     project = relationship("Project", back_populates="source_documents")
     stored_file = relationship("StoredFile")
+    chapters = relationship("Chapter", back_populates="source_document", cascade="all, delete-orphan")
+
+    @property
+    def chapter_count(self) -> int:
+        return len(self.chapters)
+
+    @property
+    def minimum_chapters_required(self) -> int:
+        return MINIMUM_CHAPTER_COUNT
+
+    @property
+    def is_generation_ready(self) -> bool:
+        return self.chapter_count >= MINIMUM_CHAPTER_COUNT
