@@ -39,6 +39,10 @@ function parseScalar(rawValue = '') {
   return value
 }
 
+function formatScalar(value) {
+  return JSON.stringify(String(value ?? ''))
+}
+
 function keyValue(line) {
   const trimmed = line.trim()
   const separator = trimmed.indexOf(':')
@@ -49,6 +53,10 @@ function keyValue(line) {
     key: trimmed.slice(0, separator).trim(),
     value: parseScalar(trimmed.slice(separator + 1))
   }
+}
+
+function lineHasKey(line, key) {
+  return line.trim().startsWith(`${key}:`)
 }
 
 function findTopLevelSection(lines, name) {
@@ -235,4 +243,91 @@ export function updateSceneLineCharacter(scriptView, sceneId, lineId, characterI
         : scene
     )
   }
+}
+
+function findSceneBlock(lines, sceneId) {
+  for (let index = 0; index < lines.length; index += 1) {
+    if (indentation(lines[index]) === 4 && lines[index].trim().startsWith('- ')) {
+      const item = keyValue(lines[index].trim().slice(2))
+      if (item?.key === 'id' && item.value === sceneId) {
+        let end = lines.length
+        for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+          if (indentation(lines[cursor]) <= 2 && lines[cursor].trim()) {
+            end = cursor
+            break
+          }
+          if (indentation(lines[cursor]) === 4 && lines[cursor].trim().startsWith('- ')) {
+            end = cursor
+            break
+          }
+        }
+        return [index, end]
+      }
+    }
+  }
+  return [-1, -1]
+}
+
+function findLineBlock(lines, sceneStart, sceneEnd, lineId) {
+  for (let index = sceneStart + 1; index < sceneEnd; index += 1) {
+    if (indentation(lines[index]) === 8 && lines[index].trim().startsWith('- ')) {
+      const item = keyValue(lines[index].trim().slice(2))
+      if (item?.key === 'id' && item.value === lineId) {
+        let end = sceneEnd
+        for (let cursor = index + 1; cursor < sceneEnd; cursor += 1) {
+          if (indentation(lines[cursor]) === 8 && lines[cursor].trim().startsWith('- ')) {
+            end = cursor
+            break
+          }
+        }
+        return [index, end]
+      }
+    }
+  }
+  return [-1, -1]
+}
+
+function upsertScalar(lines, blockStart, blockEnd, indent, key, value) {
+  const nextLine = `${' '.repeat(indent)}${key}: ${formatScalar(value)}`
+  for (let index = blockStart; index < blockEnd; index += 1) {
+    if (indentation(lines[index]) === indent && lineHasKey(lines[index], key)) {
+      lines[index] = nextLine
+      return blockEnd
+    }
+  }
+  lines.splice(blockStart + 1, 0, nextLine)
+  return blockEnd + 1
+}
+
+export function serializeScriptViewToYaml(yamlContent, scriptView) {
+  const lines = String(yamlContent || '').split(/\r?\n/)
+
+  for (const scene of scriptView.scenes || []) {
+    const [sceneStart, sceneEnd] = findSceneBlock(lines, scene.id)
+    if (sceneStart < 0) {
+      continue
+    }
+
+    let currentSceneEnd = sceneEnd
+    for (const scriptLine of scene.lines || []) {
+      const [lineStart, lineEnd] = findLineBlock(lines, sceneStart, currentSceneEnd, scriptLine.id)
+      if (lineStart < 0) {
+        continue
+      }
+
+      let currentLineEnd = upsertScalar(lines, lineStart, lineEnd, 10, 'text', scriptLine.text || '')
+      currentSceneEnd += currentLineEnd - lineEnd
+
+      if ((scriptLine.type || 'action') === 'dialogue') {
+        const beforeCharacterEnd = currentLineEnd
+        currentLineEnd = upsertScalar(lines, lineStart, currentLineEnd, 10, 'character_id', scriptLine.character_id || '')
+        currentSceneEnd += currentLineEnd - beforeCharacterEnd
+        const beforeSpeakerEnd = currentLineEnd
+        currentLineEnd = upsertScalar(lines, lineStart, currentLineEnd, 10, 'speaker', scriptLine.speaker || '')
+        currentSceneEnd += currentLineEnd - beforeSpeakerEnd
+      }
+    }
+  }
+
+  return lines.join('\n')
 }
