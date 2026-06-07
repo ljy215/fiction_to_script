@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import ChapterSummary, StoryCharacter, StoryEvent, StoryLocation
+from app.models import ChapterSummary, ScriptDocument, StoryCharacter, StoryEvent, StoryLocation
 from app.services.script_validation import validate_script_yaml
 from app.storage import LocalFileStorage, get_file_storage
 
@@ -149,6 +149,47 @@ class GenerationApiTest(unittest.TestCase):
         updated = update_response.json()
         self.assertEqual(updated["version_number"], 2)
         self.assertTrue(updated["yaml_content"].endswith("# edited"))
+
+    def test_latest_script_returns_newest_document_after_multiple_generations(self):
+        headers = self.auth_headers()
+        user_id = self.client.get("/auth/me", headers=headers).json()["id"]
+        project_id = self.create_project(headers)
+        source_document_id = self.import_text(headers, project_id)
+
+        db = self.SessionTesting()
+        try:
+            db.add(
+                ScriptDocument(
+                    owner_id=user_id,
+                    project_id=project_id,
+                    source_document_id=source_document_id,
+                    title="First script",
+                    script_type="film",
+                    yaml_content="schema_version: 1\n",
+                )
+            )
+            latest_script = ScriptDocument(
+                owner_id=user_id,
+                project_id=project_id,
+                source_document_id=source_document_id,
+                title="Second script",
+                script_type="film",
+                yaml_content="schema_version: 1\nmetadata:\n  title: Second\n",
+            )
+            db.add(latest_script)
+            db.commit()
+            db.refresh(latest_script)
+            latest_script_id = latest_script.id
+        finally:
+            db.close()
+
+        script_response = self.client.get(
+            f"/projects/{project_id}/scripts/latest",
+            headers=headers,
+        )
+
+        self.assertEqual(script_response.status_code, 200)
+        self.assertEqual(script_response.json()["id"], latest_script_id)
 
     def test_generation_requires_three_chapters(self):
         headers = self.auth_headers()

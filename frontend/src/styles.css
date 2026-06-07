@@ -608,6 +608,29 @@ ul {
   transition: width 180ms ease;
 }
 
+.generation-progress {
+  margin-top: 14px;
+}
+
+.progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #405169;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.progress-meta strong {
+  color: #1f6feb;
+  white-space: nowrap;
+}
+
+.generation-progress .progress-track {
+  margin-top: 8px;
+}
+
 .script-editor {
   margin-top: 22px;
   padding-top: 20px;
