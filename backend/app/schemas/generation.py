@@ -2,10 +2,12 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.agents.script_profiles import ScriptType
+
 
 class GenerationTaskCreate(BaseModel):
     source_document_id: int
-    script_type: str | None = Field(default=None, max_length=60)
+    script_type: ScriptType | None = None
 
 
 class ScriptDocumentRead(BaseModel):

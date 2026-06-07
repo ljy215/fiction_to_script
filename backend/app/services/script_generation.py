@@ -14,6 +14,7 @@ from app.agents.nodes import (
     schema_validator_node,
     yaml_builder_node,
 )
+from app.agents.script_profiles import get_agent_profile
 from app.agents.state import GenerationGraphState
 from app.config import get_settings
 from app.models import (
@@ -29,14 +30,6 @@ from app.models import (
 )
 
 
-SCRIPT_TYPE_LABELS = {
-    "short_drama": "短剧剧本",
-    "film": "影视剧本",
-    "audio_drama": "广播剧剧本",
-    "stage_play": "舞台剧剧本",
-}
-
-
 def _yaml_scalar(value: object) -> str:
     text = "" if value is None else str(value)
     escaped = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
@@ -46,8 +39,8 @@ def _yaml_scalar(value: object) -> str:
 def _mock_script_yaml(project: Project, source: SourceDocument, chapters: list[Chapter], script_type: str | None) -> str:
     now = datetime.now(timezone.utc).isoformat()
     title = project.novel_title or project.name
-    script_type_value = script_type or project.script_type or "film"
-    script_type_label = SCRIPT_TYPE_LABELS.get(script_type_value, script_type_value)
+    profile = get_agent_profile(script_type or project.script_type)
+    script_type_value = profile.script_type.value
     first_chapter = chapters[0] if chapters else None
     second_chapter = chapters[1] if len(chapters) > 1 else first_chapter
     third_chapter = chapters[2] if len(chapters) > 2 else second_chapter
@@ -89,13 +82,17 @@ def _mock_script_yaml(project: Project, source: SourceDocument, chapters: list[C
             "",
             "script_config:",
             f"  script_type: {_yaml_scalar(script_type_value)}",
-            f"  script_type_label: {_yaml_scalar(script_type_label)}",
+            f"  script_type_label: {_yaml_scalar(profile.label)}",
             '  fidelity_policy: "faithful"',
             '  output_mode: "single_document"',
+            f"  agent_profile: {_yaml_scalar(profile.graph_name)}",
+            f"  writing_strategy: {_yaml_scalar(profile.strategy)}",
             "",
             "generation:",
             '  provider: "mock"',
             '  model: "mock-script-writer"',
+            f"  graph_name: {_yaml_scalar(profile.graph_name)}",
+            f"  graph_version: {_yaml_scalar(profile.graph_version)}",
             f"  generated_at: {_yaml_scalar(now)}",
             "  agent_runs:",
             '    - node: "chapter_reader"',
@@ -154,7 +151,7 @@ def _mock_script_yaml(project: Project, source: SourceDocument, chapters: list[C
             '      location_id: "loc_001"',
             '      interior_exterior: "interior"',
             '      time_of_day: "night"',
-            '      purpose: "建立主要人物处境并引出核心冲突。"',
+            f"      purpose: {_yaml_scalar(profile.scene_focus)}",
             '      conflict: "主人公必须判断眼前线索是否可信。"',
             '      outcome: "主人公决定继续追查。"',
             "      source_refs:",
@@ -176,7 +173,7 @@ def _mock_script_yaml(project: Project, source: SourceDocument, chapters: list[C
             '      location_id: "loc_001"',
             '      interior_exterior: "exterior"',
             '      time_of_day: "morning"',
-            '      purpose: "推动主人公作出行动选择。"',
+            f"      purpose: {_yaml_scalar(profile.line_focus)}",
             '      conflict: "新的线索与过去认知发生冲突。"',
             '      outcome: "主人公踏上下一阶段调查。"',
             "      source_refs:",
@@ -210,13 +207,17 @@ def _is_mock_configured() -> bool:
 
 
 def _build_prompt(project: Project, chapters: list[Chapter], script_type: str | None) -> str:
+    profile = get_agent_profile(script_type or project.script_type)
     chapter_context = "\n\n".join(
         f"{chapter.title}\n{chapter.content_text[:2000]}" for chapter in chapters[:8]
     )
     return (
         "请把下面小说章节改编成一个完整中文 YAML 剧本。"
         "必须遵守项目 docs/script-yaml-schema.md 的顶层结构，输出只能是 YAML，不要解释。\n"
-        f"剧本类型：{SCRIPT_TYPE_LABELS.get(script_type or project.script_type or 'film', '影视剧本')}\n"
+        f"剧本类型：{profile.label}\n"
+        f"写作策略：{profile.strategy}\n"
+        f"场景侧重：{profile.scene_focus}\n"
+        f"台词侧重：{profile.line_focus}\n"
         f"小说名：{project.novel_title or project.name}\n"
         f"原作者：{project.original_author or '未知'}\n\n"
         f"小说章节：\n{chapter_context}"
