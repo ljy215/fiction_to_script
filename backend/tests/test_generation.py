@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import ChapterSummary, StoryEvent
+from app.models import ChapterSummary, StoryCharacter, StoryEvent, StoryLocation
 from app.storage import LocalFileStorage, get_file_storage
 
 
@@ -113,12 +113,18 @@ class GenerationApiTest(unittest.TestCase):
         try:
             summaries = db.query(ChapterSummary).order_by(ChapterSummary.chapter_order).all()
             events = db.query(StoryEvent).order_by(StoryEvent.event_order).all()
+            characters = db.query(StoryCharacter).all()
+            locations = db.query(StoryLocation).all()
         finally:
             db.close()
         self.assertEqual(len(summaries), 3)
         self.assertEqual(len(events), 3)
+        self.assertEqual(len(characters), 1)
+        self.assertEqual(len(locations), 1)
         self.assertIn("第1章", summaries[0].summary)
         self.assertEqual(events[0].event_key, "evt_001")
+        self.assertEqual(characters[0].character_key, "char_001")
+        self.assertEqual(locations[0].location_key, "loc_001")
 
         script_response = self.client.get(f"/projects/{project_id}/scripts/latest", headers=headers)
 
