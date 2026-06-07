@@ -644,6 +644,177 @@ ul {
   align-items: start;
 }
 
+.script-edit-stack {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.script-view-editor,
+.script-view-empty {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #d9deea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.script-view-empty strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #111827;
+}
+
+.script-view-empty p {
+  margin: 0;
+}
+
+.script-view-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  color: #546177;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.script-view-toolbar strong {
+  color: #111827;
+}
+
+.scene-list {
+  display: grid;
+  max-height: 620px;
+  gap: 14px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.scene-editor {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #d9deea;
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.scene-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.scene-header h3 {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: #111827;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.scene-index {
+  color: #546177;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.scene-meta {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.scene-meta div {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.scene-meta dt {
+  color: #546177;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.scene-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #405169;
+  line-height: 1.55;
+}
+
+.script-line-list {
+  display: grid;
+  gap: 10px;
+}
+
+.script-line {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.line-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.line-controls span {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #eef4ff;
+  color: #1f4f99;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.line-dialogue .line-controls span {
+  background: #edf8f0;
+  color: #1f7a3a;
+}
+
+.line-sound .line-controls span,
+.line-narration .line-controls span {
+  background: #fff7e8;
+  color: #965f00;
+}
+
+.line-controls select,
+.script-line textarea {
+  width: 100%;
+  border: 1px solid #c8d0df;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17212f;
+}
+
+.line-controls select {
+  min-height: 36px;
+  padding: 0 8px;
+}
+
+.script-line textarea {
+  min-height: 70px;
+  padding: 10px 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.line-controls select:focus,
+.script-line textarea:focus {
+  outline: 3px solid rgba(31, 111, 235, 0.18);
+  outline-offset: 0;
+  border-color: #1f6feb;
+}
+
 .yaml-editor {
   width: 100%;
   min-height: 440px;
@@ -797,6 +968,7 @@ ul {
   .import-grid,
   .workflow-grid,
   .script-review-grid,
+  .script-line,
   .chapter-row {
     grid-template-columns: 1fr;
   }
