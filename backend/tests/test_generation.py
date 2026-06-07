@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import yaml
 from fastapi.testclient import TestClient
@@ -10,9 +11,12 @@ from sqlalchemy.orm import sessionmaker
 from app.db import Base, get_db
 from app.main import app
 from app.models import ChapterSummary, ScriptDocument, StoryCharacter, StoryEvent, StoryLocation
+from app.schemas import ScriptPartialRegenerationCreate
+from app.services.partial_regeneration import regenerate_script_yaml
 from app.services.script_generation import _build_ai_generation_context, _build_prompt
 from app.services.script_validation import validate_script_yaml
 from app.storage import LocalFileStorage, get_file_storage
+from tests.test_script_validation import VALID_YAML
 
 
 class GenerationApiTest(unittest.TestCase):
@@ -328,6 +332,27 @@ class GenerationApiTest(unittest.TestCase):
         self.assertIn("广播剧剧本", prompt)
         self.assertIn("generation.graph_name 必须是 audio_drama_script_graph", prompt)
         self.assertIn("增加旁白、音效提示和语气变化。", prompt)
+
+    def test_partial_regeneration_uses_ai_when_bailian_is_configured(self):
+        fake_client = Mock()
+        fake_client.chat_completion.return_value = '{"text":"AI 改写后的动作细节。","speaker":"Hero","character_id":"char_001"}'
+        fake_settings = type("SettingsStub", (), {"bailian_api_key": "real-bailian-key"})()
+
+        with patch("app.services.partial_regeneration.get_settings", return_value=fake_settings):
+            with patch("app.services.partial_regeneration.BailianClient.from_settings", return_value=fake_client):
+                regenerated = regenerate_script_yaml(
+                    VALID_YAML,
+                    ScriptPartialRegenerationCreate(
+                        target_type="line",
+                        scene_id="sc_001",
+                        line_id="line_001",
+                        instruction="用 AI 改写动作行",
+                    ),
+                )
+
+        self.assertIn("AI 改写后的动作细节。", regenerated)
+        self.assertTrue(validate_script_yaml(regenerated)["valid"])
+        fake_client.chat_completion.assert_called_once()
 
 
 if __name__ == "__main__":

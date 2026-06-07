@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+
 const lineTypeLabels = {
   action: '动作',
   dialogue: '对白',
@@ -6,6 +8,63 @@ const lineTypeLabels = {
   transition: '转场',
   stage_direction: '舞台提示',
   note: '备注'
+}
+
+function ScriptLineEditor({
+  scene,
+  line,
+  lineType,
+  characters,
+  onLineTextChange,
+  onLineCharacterChange,
+  onRegenerateLine,
+  regeneratingTarget
+}) {
+  const [textDraft, setTextDraft] = useState(line.text || '')
+  const isDialogue = lineType === 'dialogue'
+  const isDirty = textDraft !== (line.text || '')
+
+  useEffect(() => {
+    setTextDraft(line.text || '')
+  }, [line.id, line.text])
+
+  return (
+    <div className={`script-line line-${lineType}`}>
+      <div className="line-controls">
+        <span>{lineTypeLabels[lineType] || lineType}</span>
+        {isDialogue && (
+          <select
+            aria-label="对白角色"
+            value={line.character_id || ''}
+            onChange={(event) => onLineCharacterChange(scene.id, line.id, event.target.value)}
+          >
+            <option value="">未指定角色</option>
+            {characters.map((character) => (
+              <option key={character.id} value={character.id}>
+                {character.name || character.id}
+              </option>
+            ))}
+          </select>
+        )}
+        <button className="button primary" type="button" onClick={() => onLineTextChange(scene.id, line.id, textDraft)} disabled={!isDirty}>
+          应用
+        </button>
+        <button
+          className="button secondary"
+          type="button"
+          onClick={() => onRegenerateLine(scene.id, line.id)}
+          disabled={!onRegenerateLine || regeneratingTarget === line.id}
+        >
+          {regeneratingTarget === line.id ? '重生成中...' : '重生成行'}
+        </button>
+      </div>
+      <textarea
+        aria-label={`${lineTypeLabels[lineType] || lineType}文本`}
+        value={textDraft}
+        onChange={(event) => setTextDraft(event.target.value)}
+      />
+    </div>
+  )
 }
 
 function ScriptViewEditor({
@@ -83,40 +142,18 @@ function ScriptViewEditor({
             <div className="script-line-list">
               {(scene.lines || []).map((line, lineIndex) => {
                 const lineType = line.type || 'action'
-                const isDialogue = lineType === 'dialogue'
                 return (
-                  <div className={`script-line line-${lineType}`} key={line.id || `${scene.id}-${lineIndex}`}>
-                    <div className="line-controls">
-                      <span>{lineTypeLabels[lineType] || lineType}</span>
-                      {isDialogue && (
-                        <select
-                          aria-label="对白角色"
-                          value={line.character_id || ''}
-                          onChange={(event) => onLineCharacterChange(scene.id, line.id, event.target.value)}
-                        >
-                          <option value="">未指定角色</option>
-                          {characters.map((character) => (
-                            <option key={character.id} value={character.id}>
-                              {character.name || character.id}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      <button
-                        className="button secondary"
-                        type="button"
-                        onClick={() => onRegenerateLine(scene.id, line.id)}
-                        disabled={!onRegenerateLine || regeneratingTarget === line.id}
-                      >
-                        {regeneratingTarget === line.id ? '重生成中...' : '重生成行'}
-                      </button>
-                    </div>
-                    <textarea
-                      aria-label={`${lineTypeLabels[lineType] || lineType}文本`}
-                      value={line.text || ''}
-                      onChange={(event) => onLineTextChange(scene.id, line.id, event.target.value)}
-                    />
-                  </div>
+                  <ScriptLineEditor
+                    key={line.id || `${scene.id}-${lineIndex}`}
+                    scene={scene}
+                    line={line}
+                    lineType={lineType}
+                    characters={characters}
+                    onLineTextChange={onLineTextChange}
+                    onLineCharacterChange={onLineCharacterChange}
+                    onRegenerateLine={onRegenerateLine}
+                    regeneratingTarget={regeneratingTarget}
+                  />
                 )
               })}
             </div>
